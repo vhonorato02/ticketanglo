@@ -32,8 +32,8 @@ interface Props {
   pageSize: number;
 }
 
-function escapeCsv(value: string) {
-  return `"${value.replace(/"/g, '""')}"`;
+function csvCell(value: string | number | null | undefined) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 function exportCSV(tickets: TicketRow[]) {
@@ -44,22 +44,28 @@ function exportCSV(tickets: TicketRow[]) {
     copy.tickets.table.headers.subcategory,
     copy.tickets.table.headers.priority,
     copy.tickets.table.headers.status,
+    copy.tickets.table.headers.assignee,
     copy.tickets.table.headers.author,
+    copy.tickets.table.headers.origin,
     copy.tickets.table.headers.createdAt,
+    copy.tickets.table.headers.updatedAt,
   ];
 
   const rows = tickets.map((ticket) => [
     ticket.code,
     ticket.area,
-    escapeCsv(ticket.title),
+    ticket.title,
     ticket.subcategory,
     PRIORITY_LABELS[ticket.priority],
     STATUS_LABELS[ticket.status],
+    ticket.assigneeName ?? copy.tickets.table.unassigned,
     ticket.authorName ?? copy.common.removedUser,
+    ticket.origin,
     formatPtBrDate(ticket.createdAt, DATE_FORMATS.csvDateTime),
+    formatPtBrDate(ticket.updatedAt, DATE_FORMATS.csvDateTime),
   ]);
 
-  const csv = [headers, ...rows].map((row) => row.join(';')).join('\n');
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\n');
   const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -76,11 +82,12 @@ export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const currentSearch = searchParams.get('search') ?? '';
+  const [search, setSearch] = useState(currentSearch);
 
   useEffect(() => {
-    setSearch(searchParams.get('search') ?? '');
-  }, [searchParams]);
+    setSearch(currentSearch);
+  }, [currentSearch]);
 
   const pushParams = useCallback(
     (params: URLSearchParams) => {
@@ -90,6 +97,23 @@ export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
     },
     [pathname, router],
   );
+
+  useEffect(() => {
+    const nextSearch = search.trim();
+    if (nextSearch === currentSearch) return;
+
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextSearch) {
+        params.set('search', nextSearch);
+      } else {
+        params.delete('search');
+      }
+      pushParams(params);
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [currentSearch, pushParams, search, searchParams]);
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -107,15 +131,8 @@ export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
   const handleSearch = useCallback(
     (value: string) => {
       setSearch(value);
-      const params = new URLSearchParams(searchParams.toString());
-      if (value.trim()) {
-        params.set('search', value.trim());
-      } else {
-        params.delete('search');
-      }
-      pushParams(params);
     },
-    [pushParams, searchParams],
+    [],
   );
 
   const activeArea = searchParams.get('area') ?? 'all';
@@ -297,6 +314,9 @@ export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
                     {copy.tickets.table.headers.status}
                   </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden xl:table-cell">
+                    {copy.tickets.table.headers.assignee}
+                  </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
                     {copy.tickets.table.headers.createdAt}
                   </th>
@@ -331,6 +351,13 @@ export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={ticket.status} />
+                    </td>
+                    <td className="px-4 py-3 hidden xl:table-cell">
+                      <span
+                        className={ticket.assigneeName ? 'font-medium' : 'text-muted-foreground'}
+                      >
+                        {ticket.assigneeName ?? copy.tickets.table.unassigned}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs hidden lg:table-cell whitespace-nowrap">
                       {formatPtBrDate(ticket.createdAt, DATE_FORMATS.tableCreated)}

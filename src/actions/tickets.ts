@@ -5,7 +5,22 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { db } from '@/db';
 import { ticketHistory, tickets, users, type NewTicket } from '@/db/schema';
-import { and, count, desc, eq, gte, ilike, like, or, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  like,
+  lte,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { copy } from '@/lib/copy';
 import { isValidSubcategory, type Area, type Priority, type Status } from '@/lib/constants';
@@ -13,6 +28,8 @@ import { isValidSubcategory, type Area, type Priority, type Status } from '@/lib
 const areaSchema = z.enum(['TI', 'MKT']);
 const prioritySchema = z.enum(['baixa', 'media', 'alta', 'urgente']);
 const statusSchema = z.enum(['aberto', 'em_andamento', 'aguardando', 'resolvido', 'arquivado']);
+const ticketAssignee = alias(users, 'ticket_assignee');
+const ATTENTION_STALE_DAYS = 3;
 
 async function requireAuth() {
   const session = await auth();
@@ -107,6 +124,17 @@ export async function createTicket(formData: FormData) {
     return { error: copy.validation.invalidSubcategory };
   }
 
+  let activeAssigneeId: string | null = null;
+  if (assigneeId) {
+    const [assignee] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, assigneeId), eq(users.isActive, true)))
+      .limit(1);
+    if (!assignee) return { error: copy.validation.invalidUser };
+    activeAssigneeId = assignee.id;
+  }
+
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = await generateCode(area);
     try {
@@ -118,7 +146,7 @@ export async function createTicket(formData: FormData) {
         priority,
         description: normalizeOptionalText(description),
         origin: normalizeOptionalText(origin),
-        assigneeId: assigneeId || null,
+        assigneeId: activeAssigneeId,
         authorId: user.id,
       });
 
@@ -353,14 +381,30 @@ function buildTicketConditions(filters?: {
 }) {
   const { area, status, priority, assigneeId, search } = filters ?? {};
   const conditions = [];
-  if (area && area !== 'all') conditions.push(eq(tickets.area, area as Area));
-  if (status && status !== 'all') conditions.push(eq(tickets.status, status as Status));
-  if (priority && priority !== 'all') conditions.push(eq(tickets.priority, priority as Priority));
+
+  const parsedArea = area && area !== 'all' ? areaSchema.safeParse(area) : null;
+  if (parsedArea?.success) conditions.push(eq(tickets.area, parsedArea.data));
+
+  if (status && status !== 'all') {
+    const parsedStatus = statusSchema.safeParse(status);
+    if (parsedStatus.success) {
+      conditions.push(eq(tickets.status, parsedStatus.data));
+    } else {
+      conditions.push(ne(tickets.status, 'arquivado'));
+    }
+  } else {
+    conditions.push(ne(tickets.status, 'arquivado'));
+  }
+
+  const parsedPriority = priority && priority !== 'all' ? prioritySchema.safeParse(priority) : null;
+  if (parsedPriority?.success) conditions.push(eq(tickets.priority, parsedPriority.data));
+
   if (assigneeId && assigneeId !== 'all') {
     if (assigneeId === 'unassigned') {
       conditions.push(sql`${tickets.assigneeId} IS NULL`);
     } else {
-      conditions.push(eq(tickets.assigneeId, assigneeId));
+      const parsedAssigneeId = z.string().uuid().safeParse(assigneeId);
+      if (parsedAssigneeId.success) conditions.push(eq(tickets.assigneeId, parsedAssigneeId.data));
     }
   }
   if (search) {
@@ -368,6 +412,8 @@ function buildTicketConditions(filters?: {
       or(
         ilike(tickets.title, `%${search}%`),
         ilike(tickets.code, `%${search}%`),
+        ilike(tickets.subcategory, `%${search}%`),
+        ilike(sql`COALESCE(${tickets.origin}, '')`, `%${search}%`),
         ilike(sql`COALESCE(${tickets.description}, '')`, `%${search}%`),
       ),
     );
@@ -408,9 +454,11 @@ export async function getTickets(filters?: {
       authorId: tickets.authorId,
       assigneeId: tickets.assigneeId,
       authorName: users.displayName,
+      assigneeName: ticketAssignee.displayName,
     })
     .from(tickets)
     .leftJoin(users, eq(tickets.authorId, users.id))
+    .leftJoin(ticketAssignee, eq(tickets.assigneeId, ticketAssignee.id))
     .where(where)
     .orderBy(desc(tickets.createdAt))
     .limit(limit)
@@ -492,15 +540,99 @@ export async function getDashboardStats() {
   };
 }
 
+function daysSince(date: Date | string, now = new Date()) {
+  return Math.max(
+    0,
+    Math.floor((now.getTime() - new Date(date).getTime()) / (24 * 60 * 60 * 1000)),
+  );
+}
+
+function priorityRank(priority: Priority) {
+  return { urgente: 0, alta: 1, media: 2, baixa: 3 }[priority];
+}
+
+export async function getAttentionTickets() {
+  const now = new Date();
+  const staleDate = new Date(now.getTime() - ATTENTION_STALE_DAYS * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      id: tickets.id,
+      code: tickets.code,
+      area: tickets.area,
+      title: tickets.title,
+      subcategory: tickets.subcategory,
+      priority: tickets.priority,
+      status: tickets.status,
+      assigneeId: tickets.assigneeId,
+      assigneeName: ticketAssignee.displayName,
+      createdAt: tickets.createdAt,
+      updatedAt: tickets.updatedAt,
+    })
+    .from(tickets)
+    .leftJoin(ticketAssignee, eq(tickets.assigneeId, ticketAssignee.id))
+    .where(
+      and(
+        inArray(tickets.status, ['aberto', 'em_andamento', 'aguardando']),
+        or(
+          eq(tickets.priority, 'urgente'),
+          eq(tickets.status, 'aguardando'),
+          isNull(tickets.assigneeId),
+          lte(tickets.updatedAt, staleDate),
+        ),
+      ),
+    )
+    .orderBy(desc(tickets.updatedAt))
+    .limit(60);
+
+  return rows
+    .map((ticket) => {
+      const stalledDays = daysSince(ticket.updatedAt, now);
+      const reason =
+        ticket.priority === 'urgente'
+          ? copy.dashboard.attention.reasons.urgent
+          : ticket.status === 'aguardando'
+            ? copy.dashboard.attention.reasons.waiting
+            : !ticket.assigneeId
+              ? copy.dashboard.attention.reasons.unassigned
+              : copy.dashboard.attention.reasons.stale(stalledDays);
+      const rank =
+        ticket.priority === 'urgente'
+          ? 0
+          : ticket.status === 'aguardando'
+            ? 1
+            : !ticket.assigneeId
+              ? 2
+              : 3;
+
+      return {
+        ...ticket,
+        reason,
+        rank,
+        ageDays: daysSince(ticket.createdAt, now),
+        stalledDays,
+      };
+    })
+    .sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      const priority = priorityRank(a.priority) - priorityRank(b.priority);
+      if (priority !== 0) return priority;
+      return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+    })
+    .slice(0, 6);
+}
+
 export async function getKanbanTickets(filters?: { area?: string; assigneeId?: string }) {
   const { area, assigneeId } = filters ?? {};
   const conditions = [];
-  if (area && area !== 'all') conditions.push(eq(tickets.area, area as Area));
+  const parsedArea = area && area !== 'all' ? areaSchema.safeParse(area) : null;
+  if (parsedArea?.success) conditions.push(eq(tickets.area, parsedArea.data));
   if (assigneeId && assigneeId !== 'all') {
     if (assigneeId === 'unassigned') {
       conditions.push(sql`${tickets.assigneeId} IS NULL`);
     } else {
-      conditions.push(eq(tickets.assigneeId, assigneeId));
+      const parsedAssigneeId = z.string().uuid().safeParse(assigneeId);
+      if (parsedAssigneeId.success) conditions.push(eq(tickets.assigneeId, parsedAssigneeId.data));
     }
   }
   conditions.push(

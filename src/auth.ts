@@ -29,7 +29,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .select()
           .from(users)
           .where(eq(users.username, parsed.data.username))
-          .limit(1);
+          .limit(1)
+          .catch(() => [null]);
 
         if (!user || !user.isActive) return null;
 

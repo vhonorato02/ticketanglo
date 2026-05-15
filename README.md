@@ -60,6 +60,7 @@ npm run dev
 npm run dev        # Servidor local
 npm run build      # Build de produção
 npm run lint       # ESLint
+npm run test:smoke # Sobe servidor isolado e valida fluxos críticos HTTP
 npm run db:push    # Aplica schema Drizzle
 npm run db:migrate # Aplica migrations
 npm run db:studio  # Abre Drizzle Studio

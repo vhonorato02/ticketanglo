@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowRight,
+  ArrowUpRight,
   CheckCircle2,
   Clock,
   Inbox,
@@ -9,13 +11,16 @@ import {
   Zap,
 } from 'lucide-react';
 import { auth } from '@/auth';
-import { getDashboardStats, getTickets } from '@/actions/tickets';
+import { getAttentionTickets, getDashboardStats, getTickets } from '@/actions/tickets';
 import { AreaBadge, PriorityBadge, StatusBadge } from '@/components/tickets/ticket-badge';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { copy } from '@/lib/copy';
 import { capitalizeFirst, DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
+
+type AttentionTicket = Awaited<ReturnType<typeof getAttentionTickets>>[number];
 
 interface StatCardProps {
   label: string;
@@ -79,13 +84,94 @@ function EmptyHint({ text }: { text: string }) {
   );
 }
 
+function AttentionQueue({ tickets }: { tickets: AttentionTicket[] }) {
+  return (
+    <section className="xl:sticky xl:top-20 xl:self-start">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+            <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
+            {copy.dashboard.attention.title}
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {copy.dashboard.attention.description}
+          </p>
+        </div>
+        <Link
+          href="/tickets"
+          className="text-sm text-primary hover:underline flex items-center gap-1 font-medium"
+        >
+          {copy.dashboard.attention.viewAll}
+          <ArrowUpRight className="size-3.5" />
+        </Link>
+      </div>
+
+      {tickets.length === 0 ? (
+        <div className="rounded-xl border bg-card py-12 px-5 text-center">
+          <div className="size-11 rounded-xl bg-green-500/10 mx-auto flex items-center justify-center mb-4">
+            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
+          </div>
+          <p className="font-medium">{copy.dashboard.attention.emptyTitle}</p>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {copy.dashboard.attention.emptyHint}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card overflow-hidden divide-y">
+          {tickets.map((ticket) => (
+            <Link
+              key={ticket.id}
+              href={`/tickets/${ticket.code}`}
+              className="block p-3.5 hover:bg-muted/45 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="font-mono text-xs text-primary font-medium">
+                      {ticket.code}
+                    </span>
+                    <Badge variant={ticket.rank === 0 ? 'destructive' : 'warning'}>
+                      {ticket.reason}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-medium leading-snug line-clamp-2">{ticket.title}</p>
+                </div>
+                <PriorityBadge priority={ticket.priority} />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <AreaBadge area={ticket.area} />
+                  <span className="truncate">{ticket.subcategory}</span>
+                </div>
+                <span className="shrink-0 tabular-nums">
+                  {copy.dashboard.attention.age(ticket.ageDays)}
+                </span>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {copy.dashboard.attention.assignee}:{' '}
+                  {ticket.assigneeName ?? copy.dashboard.attention.noAssignee}
+                </span>
+                <StatusBadge status={ticket.status} />
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   const userName = session?.user?.name ?? copy.dashboard.greeting.fallbackName;
 
-  const [stats, recentTickets] = await Promise.all([
+  const [stats, recentTickets, attentionTickets] = await Promise.all([
     getDashboardStats(),
     getTickets({ page: 1 }),
+    getAttentionTickets(),
   ]);
 
   const recent = recentTickets.slice(0, 8);
@@ -141,103 +227,109 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">{copy.dashboard.recent.title}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {copy.dashboard.recent.description}
-            </p>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {copy.dashboard.recent.title}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {copy.dashboard.recent.description}
+              </p>
+            </div>
+            <Link
+              href="/tickets"
+              className="text-sm text-primary hover:underline flex items-center gap-1 font-medium"
+            >
+              {copy.dashboard.recent.viewAll} <ArrowRight className="size-3.5" />
+            </Link>
           </div>
-          <Link
-            href="/tickets"
-            className="text-sm text-primary hover:underline flex items-center gap-1 font-medium"
-          >
-            {copy.dashboard.recent.viewAll} <ArrowRight className="size-3.5" />
-          </Link>
-        </div>
 
-        {recent.length === 0 ? (
-          <div className="rounded-xl border bg-card py-16 text-center">
-            <div className="size-12 rounded-xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
-              <Inbox className="size-5 text-muted-foreground" />
+          {recent.length === 0 ? (
+            <div className="rounded-xl border bg-card py-16 text-center">
+              <div className="size-12 rounded-xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
+                <Inbox className="size-5 text-muted-foreground" />
+              </div>
+              <p className="font-medium">{copy.dashboard.recent.emptyTitle}</p>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                <EmptyHint text={copy.dashboard.recent.emptyHint} />
+              </p>
             </div>
-            <p className="font-medium">{copy.dashboard.recent.emptyTitle}</p>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              <EmptyHint text={copy.dashboard.recent.emptyHint} />
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-xs">
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      {copy.tickets.table.headers.code}
-                    </th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      {copy.tickets.table.headers.title}
-                    </th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                      {copy.tickets.table.headers.area}
-                    </th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">
-                      {copy.tickets.table.headers.priority}
-                    </th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      {copy.tickets.table.headers.status}
-                    </th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
-                      {copy.tickets.table.headers.createdAt}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((ticket) => (
-                    <tr
-                      key={ticket.id}
-                      className="border-b last:border-0 hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/tickets/${ticket.code}`}
-                          className="font-mono text-xs text-primary hover:underline font-medium"
-                        >
-                          {ticket.code}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 max-w-[280px]">
-                        <Link
-                          href={`/tickets/${ticket.code}`}
-                          className="hover:underline line-clamp-1 font-medium"
-                        >
-                          {ticket.title}
-                        </Link>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {ticket.subcategory}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <AreaBadge area={ticket.area} />
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <PriorityBadge priority={ticket.priority} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={ticket.status} />
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">
-                        {formatPtBrDate(ticket.createdAt, DATE_FORMATS.dashboardRecent)}
-                      </td>
+          ) : (
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-xs">
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                        {copy.tickets.table.headers.code}
+                      </th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                        {copy.tickets.table.headers.title}
+                      </th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
+                        {copy.tickets.table.headers.area}
+                      </th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">
+                        {copy.tickets.table.headers.priority}
+                      </th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                        {copy.tickets.table.headers.status}
+                      </th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
+                        {copy.tickets.table.headers.createdAt}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recent.map((ticket) => (
+                      <tr
+                        key={ticket.id}
+                        className="border-b last:border-0 hover:bg-muted/40 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/tickets/${ticket.code}`}
+                            className="font-mono text-xs text-primary hover:underline font-medium"
+                          >
+                            {ticket.code}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 max-w-[280px]">
+                          <Link
+                            href={`/tickets/${ticket.code}`}
+                            className="hover:underline line-clamp-1 font-medium"
+                          >
+                            {ticket.title}
+                          </Link>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {ticket.subcategory}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <AreaBadge area={ticket.area} />
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          <PriorityBadge priority={ticket.priority} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={ticket.status} />
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">
+                          {formatPtBrDate(ticket.createdAt, DATE_FORMATS.dashboardRecent)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+
+        <AttentionQueue tickets={attentionTickets} />
+      </div>
     </div>
   );
 }

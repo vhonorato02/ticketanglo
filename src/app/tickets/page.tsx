@@ -21,7 +21,8 @@ interface PageProps {
 }
 
 async function TicketList({ searchParams }: { searchParams: Awaited<PageProps['searchParams']> }) {
-  const page = Math.max(searchParams.page ? Number.parseInt(searchParams.page, 10) : 1, 1);
+  const parsedPage = searchParams.page ? Number.parseInt(searchParams.page, 10) : 1;
+  const page = Number.isFinite(parsedPage) ? Math.max(parsedPage, 1) : 1;
   const filters = {
     area: searchParams.area,
     status: searchParams.status,

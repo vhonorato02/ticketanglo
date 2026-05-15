@@ -15,7 +15,11 @@ export const authConfig: NextAuthConfig = {
         if (isLoggedIn) return Response.redirect(new URL('/', nextUrl));
         return true;
       }
-      return isLoggedIn;
+      if (isLoggedIn) return true;
+
+      const loginUrl = new URL('/login', nextUrl);
+      loginUrl.searchParams.set('callbackUrl', nextUrl.href);
+      return Response.redirect(loginUrl);
     },
     jwt({ token, user }) {
       if (user) {

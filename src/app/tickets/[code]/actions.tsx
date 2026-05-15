@@ -27,6 +27,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { deleteTicket, updateTicketField, updateTicketStatus } from '@/actions/tickets';
 import { cn } from '@/lib/utils';
 import { copy } from '@/lib/copy';
+import { DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 import { PRIORITY_LABELS, PRIORITY_ORDER, STATUS_TRANSITIONS } from '@/lib/constants';
 import type { Ticket, User } from '@/db/schema';
 import { EditTicketDialog } from './edit-ticket-dialog';
@@ -305,6 +306,12 @@ export function TicketActions({
             <span className="text-muted-foreground">{copy.tickets.detail.openedBy}</span>
             <span className="font-medium text-right truncate">
               {ticket.author?.displayName ?? copy.common.removedUser}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">{copy.tickets.detail.updatedAt}</span>
+            <span className="font-medium text-right">
+              {formatPtBrDate(ticket.updatedAt, DATE_FORMATS.tableCreated)}
             </span>
           </div>
           {ticket.assignee && (
