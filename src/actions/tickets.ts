@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { db } from '@/db';
 import { tickets, ticketHistory, users } from '@/db/schema';
-import { eq, desc, like, or, and, gte, sql, count } from 'drizzle-orm';
+import { eq, desc, like, ilike, or, and, gte, sql, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { TI_SUBCATEGORIES, MKT_SUBCATEGORIES } from '@/lib/constants';
 
@@ -42,6 +42,17 @@ async function recordHistory(
   newValue: string | null,
 ) {
   await db.insert(ticketHistory).values({ ticketId, authorId, field, oldValue, newValue });
+}
+
+// Resolve UUID de usuário para displayName para o log de histórico
+async function resolveUserName(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const [user] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.displayName ?? null;
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -135,15 +146,6 @@ export async function updateTicketStatus(
 
 // ─── Update field ─────────────────────────────────────────────────────────────
 
-const updateSchema = z.object({
-  title: z.string().min(1).max(80).optional(),
-  description: z.string().nullable().optional(),
-  origin: z.string().nullable().optional(),
-  priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
-  assigneeId: z.string().uuid().nullable().optional(),
-  subcategory: z.string().optional(),
-});
-
 export async function updateTicketField(
   code: string,
   field: string,
@@ -151,25 +153,30 @@ export async function updateTicketField(
 ) {
   const user = await requireAuth();
 
-  const [ticket] = await db
-    .select()
-    .from(tickets)
-    .where(eq(tickets.code, code))
-    .limit(1);
-
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
   if (!ticket) return { error: 'Ticket não encontrado.' };
 
   const allowedFields = ['title', 'description', 'origin', 'priority', 'assigneeId', 'subcategory'];
   if (!allowedFields.includes(field)) return { error: 'Campo inválido.' };
 
-  const oldValue = String((ticket as Record<string, unknown>)[field] ?? '');
+  const rawOld = (ticket as Record<string, unknown>)[field];
+  const oldValue = rawOld != null ? String(rawOld) : null;
 
   await db
     .update(tickets)
     .set({ [field]: value, updatedAt: new Date() })
     .where(eq(tickets.code, code));
 
-  await recordHistory(ticket.id, user.id, field, oldValue || null, value);
+  // Para responsável, grava o nome no histórico (não o UUID)
+  if (field === 'assigneeId') {
+    const [oldName, newName] = await Promise.all([
+      resolveUserName(oldValue),
+      resolveUserName(value),
+    ]);
+    await recordHistory(ticket.id, user.id, 'responsável', oldName, newName);
+  } else {
+    await recordHistory(ticket.id, user.id, field, oldValue, value);
+  }
 
   revalidatePath(`/tickets/${code}`);
   revalidatePath('/tickets');
@@ -195,8 +202,12 @@ export async function getTickets(filters?: {
 
   const conditions = [];
   if (area && area !== 'all') conditions.push(eq(tickets.area, area as 'TI' | 'MKT'));
-  if (status && status !== 'all') conditions.push(eq(tickets.status, status as 'aberto' | 'em_andamento' | 'aguardando' | 'resolvido' | 'arquivado'));
-  if (priority && priority !== 'all') conditions.push(eq(tickets.priority, priority as 'baixa' | 'media' | 'alta' | 'urgente'));
+  if (status && status !== 'all')
+    conditions.push(
+      eq(tickets.status, status as 'aberto' | 'em_andamento' | 'aguardando' | 'resolvido' | 'arquivado'),
+    );
+  if (priority && priority !== 'all')
+    conditions.push(eq(tickets.priority, priority as 'baixa' | 'media' | 'alta' | 'urgente'));
   if (assigneeId && assigneeId !== 'all') {
     if (assigneeId === 'unassigned') {
       conditions.push(sql`${tickets.assigneeId} IS NULL`);
@@ -207,16 +218,16 @@ export async function getTickets(filters?: {
   if (search) {
     conditions.push(
       or(
-        like(tickets.title, `%${search}%`),
-        like(tickets.code, `%${search}%`),
-        like(tickets.description ?? sql`''`, `%${search}%`),
+        ilike(tickets.title, `%${search}%`),
+        ilike(tickets.code, `%${search}%`),
+        ilike(sql`COALESCE(${tickets.description}, '')`, `%${search}%`),
       ),
     );
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const rows = await db
+  return db
     .select({
       id: tickets.id,
       code: tickets.code,
@@ -240,17 +251,10 @@ export async function getTickets(filters?: {
     .orderBy(desc(tickets.createdAt))
     .limit(limit)
     .offset(offset);
-
-  return rows;
 }
 
 export async function getTicket(code: string) {
-  const [ticket] = await db
-    .select()
-    .from(tickets)
-    .where(eq(tickets.code, code))
-    .limit(1);
-
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
   if (!ticket) return null;
 
   const [author] = await db
@@ -273,8 +277,7 @@ export async function getTicket(code: string) {
 }
 
 export async function getDashboardStats() {
-  const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [abertosTI, abertosMKT, urgentes, aguardando, resolvidosSemana] = await Promise.all([
     db
@@ -294,10 +297,7 @@ export async function getDashboardStats() {
           or(eq(tickets.status, 'aberto'), eq(tickets.status, 'em_andamento')),
         ),
       ),
-    db
-      .select({ count: count() })
-      .from(tickets)
-      .where(eq(tickets.status, 'aguardando')),
+    db.select({ count: count() }).from(tickets).where(eq(tickets.status, 'aguardando')),
     db
       .select({ count: count() })
       .from(tickets)
@@ -317,10 +317,7 @@ export async function getKanbanTickets(filters?: { area?: string; assigneeId?: s
   const { area, assigneeId } = filters ?? {};
   const conditions = [];
   if (area && area !== 'all') conditions.push(eq(tickets.area, area as 'TI' | 'MKT'));
-  if (assigneeId && assigneeId !== 'all') {
-    conditions.push(eq(tickets.assigneeId, assigneeId));
-  }
-  // Arquivados ficam fora do kanban por padrão
+  if (assigneeId && assigneeId !== 'all') conditions.push(eq(tickets.assigneeId, assigneeId));
   conditions.push(
     or(
       eq(tickets.status, 'aberto'),

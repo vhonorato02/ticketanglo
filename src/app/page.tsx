@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { format, startOfWeek } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Monitor,
@@ -9,7 +9,7 @@ import {
   CheckCircle2,
   ArrowRight,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge, PriorityBadge, AreaBadge } from '@/components/tickets/ticket-badge';
 import { getDashboardStats, getTickets } from '@/actions/tickets';
 
@@ -20,14 +20,13 @@ interface StatCardProps {
   value: number;
   icon: React.ReactNode;
   href: string;
-  accent?: string;
   empty?: string;
 }
 
-function StatCard({ title, value, icon, href, accent, empty }: StatCardProps) {
+function StatCard({ title, value, icon, href, empty }: StatCardProps) {
   return (
     <Link href={href}>
-      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${accent ?? ''}`}>
+      <Card className="hover:shadow-md transition-shadow cursor-pointer">
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div>
@@ -36,7 +35,7 @@ function StatCard({ title, value, icon, href, accent, empty }: StatCardProps) {
               </p>
               <p className="text-3xl font-bold mt-1">{value}</p>
               {value === 0 && empty && (
-                <p className="text-xs text-muted-foreground mt-1">{empty}</p>
+                <p className="text-xs text-muted-foreground mt-1 italic">{empty}</p>
               )}
             </div>
             <div className="p-2 rounded-lg bg-muted/50">{icon}</div>
@@ -55,16 +54,17 @@ export default async function DashboardPage() {
 
   const recent = recentTickets.slice(0, 10);
 
+  const rawDate = format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
+  const today = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-        </p>
+        <p className="text-muted-foreground text-sm mt-1">{today}</p>
       </div>
 
-      {/* Stats */}
+      {/* Cards de métricas */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
           title="Abertos TI"
@@ -95,18 +95,18 @@ export default async function DashboardPage() {
           empty="Sem bloqueios."
         />
         <StatCard
-          title="Resolvidos esta semana"
+          title="Resolvidos na semana"
           value={Number(stats.resolvidosSemana)}
           icon={<CheckCircle2 className="size-4 text-green-600" />}
           href="/tickets?status=resolvido"
-          empty="Nada ainda."
+          empty="Nada ainda esta semana."
         />
       </div>
 
-      {/* Recent tickets */}
+      {/* Tickets recentes */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Tickets recentes</h2>
+          <h2 className="text-lg font-semibold">Últimas demandas</h2>
           <Link
             href="/tickets"
             className="text-sm text-primary hover:underline flex items-center gap-1"
@@ -119,10 +119,11 @@ export default async function DashboardPage() {
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
               <CheckCircle2 className="mx-auto size-8 mb-3 opacity-40" />
-              <p className="font-medium">Nenhum ticket ainda</p>
+              <p className="font-medium">Nenhuma demanda registrada ainda</p>
               <p className="text-sm mt-1">
-                Pressione <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd>{' '}
-                para registrar o primeiro.
+                Pressione{' '}
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd> para
+                registrar a primeira.
               </p>
             </CardContent>
           </Card>
@@ -155,9 +156,13 @@ export default async function DashboardPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 max-w-[240px]">
-                        <Link href={`/tickets/${ticket.code}`} className="hover:underline line-clamp-1">
+                        <Link
+                          href={`/tickets/${ticket.code}`}
+                          className="hover:underline line-clamp-1 font-medium"
+                        >
                           {ticket.title}
                         </Link>
+                        <p className="text-xs text-muted-foreground">{ticket.subcategory}</p>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <AreaBadge area={ticket.area} />
@@ -169,7 +174,9 @@ export default async function DashboardPage() {
                         <StatusBadge status={ticket.status} />
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">
-                        {format(new Date(ticket.createdAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                        {format(new Date(ticket.createdAt), "dd/MM/yy 'às' HH:mm", {
+                          locale: ptBR,
+                        })}
                       </td>
                     </tr>
                   ))}

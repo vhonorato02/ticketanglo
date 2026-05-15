@@ -31,7 +31,7 @@ import type { User } from '@/db/schema';
 const schema = z.object({
   area: z.enum(['TI', 'MKT']),
   title: z.string().min(1, 'Título obrigatório').max(80, 'Máximo 80 caracteres'),
-  subcategory: z.string().min(1, 'Subcategoria obrigatória'),
+  subcategory: z.string().min(1, 'Escolha uma subcategoria'),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']),
   description: z.string().optional(),
   origin: z.string().optional(),
@@ -64,7 +64,13 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
   });
 
   const area = watch('area');
+  const subcategory = watch('subcategory');
   const subcategories = area === 'TI' ? TI_SUBCATEGORIES : MKT_SUBCATEGORIES;
+
+  const handleAreaChange = (v: 'TI' | 'MKT') => {
+    setValue('area', v);
+    setValue('subcategory', ''); // reset subcategory when area changes
+  };
 
   const onSubmit = (data: FormData) => {
     startTransition(async () => {
@@ -79,7 +85,7 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
         return;
       }
 
-      toast.success(`Ticket ${result.code} registrado.`);
+      toast.success(`Ticket ${result.code} registrado com sucesso.`);
       reset();
       setShowExtra(false);
       onClose();
@@ -99,21 +105,15 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Registrar ticket</DialogTitle>
+          <DialogTitle>Registrar demanda</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Area */}
+          {/* Area + Subcategoria */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Área *</Label>
-              <Select
-                value={area}
-                onValueChange={(v) => {
-                  setValue('area', v as 'TI' | 'MKT');
-                  setValue('subcategory', '');
-                }}
-              >
+              <Select value={area} onValueChange={handleAreaChange}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
@@ -126,7 +126,12 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
 
             <div>
               <Label>Subcategoria *</Label>
-              <Select onValueChange={(v) => setValue('subcategory', v)}>
+              {/* key={area} força remount do Select ao trocar área */}
+              <Select
+                key={area}
+                value={subcategory ?? ''}
+                onValueChange={(v) => setValue('subcategory', v)}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
@@ -144,7 +149,7 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
             </div>
           </div>
 
-          {/* Title */}
+          {/* Título */}
           <div>
             <Label htmlFor="title">Título *</Label>
             <Input
@@ -159,7 +164,7 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
             )}
           </div>
 
-          {/* Priority */}
+          {/* Prioridade */}
           <div>
             <Label>Prioridade</Label>
             <Select
@@ -173,19 +178,19 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
                 <SelectItem value="baixa">Baixa</SelectItem>
                 <SelectItem value="media">Média</SelectItem>
                 <SelectItem value="alta">Alta</SelectItem>
-                <SelectItem value="urgente">Urgente</SelectItem>
+                <SelectItem value="urgente">Urgente — precisa de atenção imediata</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Extra fields toggle */}
+          {/* Mais opções */}
           <button
             type="button"
             onClick={() => setShowExtra(!showExtra)}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             {showExtra ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            Mais opções
+            {showExtra ? 'Menos opções' : 'Mais opções'}
           </button>
 
           {showExtra && (
@@ -221,7 +226,7 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
                 <Textarea
                   id="description"
                   className="mt-1 min-h-[80px]"
-                  placeholder="Detalhes adicionais..."
+                  placeholder="Descreva o problema ou solicitação em detalhes..."
                   {...register('description')}
                 />
               </div>
@@ -234,7 +239,7 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Registrar ticket
+              Registrar demanda
             </Button>
           </div>
         </form>

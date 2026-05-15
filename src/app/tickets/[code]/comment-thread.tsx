@@ -34,10 +34,11 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function CommentThread({ ticketCode, comments, currentUserId }: CommentThreadProps) {
+export function CommentThread({ ticketCode, comments }: CommentThreadProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,7 +52,7 @@ export function CommentThread({ ticketCode, comments, currentUserId }: CommentTh
         toast.error(res.error);
       } else {
         toast.success('Comentário adicionado.');
-        if (textareaRef.current) textareaRef.current.value = '';
+        formRef.current?.reset();
         router.refresh();
       }
     });
@@ -65,7 +66,9 @@ export function CommentThread({ ticketCode, comments, currentUserId }: CommentTh
       </h2>
 
       {comments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum comentário ainda.</p>
+        <p className="text-sm text-muted-foreground">
+          Nenhum comentário ainda. Registre uma atualização abaixo.
+        </p>
       ) : (
         <div className="space-y-4">
           {comments.map((comment) => (
@@ -94,12 +97,12 @@ export function CommentThread({ ticketCode, comments, currentUserId }: CommentTh
         </div>
       )}
 
-      {/* New comment form */}
-      <form onSubmit={handleSubmit} className="space-y-2">
+      {/* Novo comentário */}
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-2">
         <Textarea
           ref={textareaRef}
           name="body"
-          placeholder="Adicionar comentário..."
+          placeholder="Atualização, dúvida ou observação... (Cmd+Enter para enviar)"
           className="min-h-[80px]"
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {

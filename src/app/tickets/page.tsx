@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import { getTickets } from '@/actions/tickets';
-import { getUsers } from '@/actions/users';
 import { TicketTable } from '@/components/tickets/ticket-table';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -18,24 +17,16 @@ interface PageProps {
 }
 
 async function TicketList({ searchParams }: { searchParams: Awaited<PageProps['searchParams']> }) {
-  const [tickets, users] = await Promise.all([
-    getTickets({
-      area: searchParams.area,
-      status: searchParams.status,
-      priority: searchParams.priority,
-      assigneeId: searchParams.assigneeId,
-      search: searchParams.search,
-      page: searchParams.page ? parseInt(searchParams.page) : 1,
-    }),
-    getUsers(),
-  ]);
+  const tickets = await getTickets({
+    area: searchParams.area,
+    status: searchParams.status,
+    priority: searchParams.priority,
+    assigneeId: searchParams.assigneeId,
+    search: searchParams.search,
+    page: searchParams.page ? parseInt(searchParams.page) : 1,
+  });
 
-  return (
-    <TicketTable
-      tickets={tickets}
-      users={users.filter((u) => u.isActive).map((u) => ({ id: u.id, displayName: u.displayName }))}
-    />
-  );
+  return <TicketTable tickets={tickets} />;
 }
 
 export default async function TicketsPage({ searchParams }: PageProps) {
