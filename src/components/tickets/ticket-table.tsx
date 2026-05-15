@@ -1,13 +1,11 @@
 'use client';
 
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { useCallback, useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Search, Download, Inbox, X, FilterX } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Download, FilterX, Inbox, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { PriorityBadge, StatusBadge, AreaBadge } from './ticket-badge';
+import { AreaBadge, PriorityBadge, StatusBadge } from './ticket-badge';
 import {
   Select,
   SelectContent,
@@ -16,45 +14,79 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { TicketRow } from '@/actions/tickets';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants';
+import {
+  AREA_OPTIONS,
+  PRIORITY_LABELS,
+  PRIORITY_ORDER,
+  STATUS_LABELS,
+  STATUS_ORDER,
+} from '@/lib/constants';
+import { copy } from '@/lib/copy';
+import { DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 
 interface Props {
   tickets: TicketRow[];
+  users: { id: string; displayName: string }[];
+}
+
+function escapeCsv(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function exportCSV(tickets: TicketRow[]) {
-  const headers = ['Código', 'Área', 'Título', 'Subcategoria', 'Prioridade', 'Status', 'Autor', 'Criado em'];
-  const rows = tickets.map((t) => [
-    t.code,
-    t.area,
-    `"${t.title.replace(/"/g, '""')}"`,
-    t.subcategory,
-    PRIORITY_LABELS[t.priority],
-    STATUS_LABELS[t.status],
-    t.authorName ?? '',
-    format(new Date(t.createdAt), 'dd/MM/yyyy HH:mm'),
+  const headers = [
+    copy.tickets.table.headers.code,
+    copy.tickets.table.headers.area,
+    copy.tickets.table.headers.title,
+    copy.tickets.table.headers.subcategory,
+    copy.tickets.table.headers.priority,
+    copy.tickets.table.headers.status,
+    copy.tickets.table.headers.author,
+    copy.tickets.table.headers.createdAt,
+  ];
+
+  const rows = tickets.map((ticket) => [
+    ticket.code,
+    ticket.area,
+    escapeCsv(ticket.title),
+    ticket.subcategory,
+    PRIORITY_LABELS[ticket.priority],
+    STATUS_LABELS[ticket.status],
+    ticket.authorName ?? copy.common.removedUser,
+    formatPtBrDate(ticket.createdAt, DATE_FORMATS.csvDateTime),
   ]);
 
-  const csv = [headers, ...rows].map((r) => r.join(';')).join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const csv = [headers, ...rows].map((row) => row.join(';')).join('\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `tickets-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-  a.click();
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${copy.tickets.table.fileNamePrefix}-${formatPtBrDate(
+    new Date(),
+    DATE_FORMATS.csvFileDate,
+  )}.csv`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
-export function TicketTable({ tickets }: Props) {
+export function TicketTable({ tickets, users }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
 
-  // Sync local state when URL changes externally
   useEffect(() => {
     setSearch(searchParams.get('search') ?? '');
   }, [searchParams]);
+
+  const pushParams = useCallback(
+    (params: URLSearchParams) => {
+      params.delete('page');
+      const qs = params.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [pathname, router],
+  );
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -64,95 +96,115 @@ export function TicketTable({ tickets }: Props) {
       } else {
         params.delete(key);
       }
-      params.delete('page');
-      const qs = params.toString();
-      router.push(qs ? `${pathname}?${qs}` : pathname);
+      pushParams(params);
     },
-    [pathname, router, searchParams],
+    [pushParams, searchParams],
   );
 
   const handleSearch = useCallback(
     (value: string) => {
       setSearch(value);
       const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set('search', value);
+      if (value.trim()) {
+        params.set('search', value.trim());
       } else {
         params.delete('search');
       }
-      const qs = params.toString();
-      router.push(qs ? `${pathname}?${qs}` : pathname);
+      pushParams(params);
     },
-    [pathname, router, searchParams],
+    [pushParams, searchParams],
   );
 
   const activeArea = searchParams.get('area') ?? 'all';
   const activeStatus = searchParams.get('status') ?? 'all';
   const activePriority = searchParams.get('priority') ?? 'all';
+  const activeAssignee = searchParams.get('assigneeId') ?? 'all';
   const hasActiveFilters =
-    activeArea !== 'all' || activeStatus !== 'all' || activePriority !== 'all' || !!search;
+    activeArea !== 'all' ||
+    activeStatus !== 'all' ||
+    activePriority !== 'all' ||
+    activeAssignee !== 'all' ||
+    !!search;
 
   const clearFilters = () => router.push(pathname);
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Buscar por código, título ou descrição..."
+            placeholder={copy.tickets.table.searchPlaceholder}
             className="pl-9 pr-9"
             value={search}
-            onChange={(e) => handleSearch(e.target.value)}
+            onChange={(event) => handleSearch(event.target.value)}
             id="search-input"
           />
           {search && (
             <button
               onClick={() => handleSearch('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
-              aria-label="Limpar busca"
+              aria-label={copy.tickets.table.clearSearch}
             >
               <X className="size-3.5" />
             </button>
           )}
         </div>
 
-        <Select value={activeArea} onValueChange={(v) => updateParam('area', v)}>
+        <Select value={activeArea} onValueChange={(value) => updateParam('area', value)}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="Área" />
+            <SelectValue placeholder={copy.tickets.table.headers.area} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas áreas</SelectItem>
-            <SelectItem value="TI">TI</SelectItem>
-            <SelectItem value="MKT">Marketing</SelectItem>
+            <SelectItem value="all">{copy.tickets.table.allAreas}</SelectItem>
+            {AREA_OPTIONS.map((area) => (
+              <SelectItem key={area.value} value={area.value}>
+                {area.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
-        <Select value={activeStatus} onValueChange={(v) => updateParam('status', v)}>
+        <Select value={activeStatus} onValueChange={(value) => updateParam('status', value)}>
           <SelectTrigger className="w-36">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={copy.tickets.table.headers.status} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="aberto">Aberto</SelectItem>
-            <SelectItem value="em_andamento">Em andamento</SelectItem>
-            <SelectItem value="aguardando">Aguardando</SelectItem>
-            <SelectItem value="resolvido">Resolvido</SelectItem>
-            <SelectItem value="arquivado">Arquivado</SelectItem>
+            <SelectItem value="all">{copy.tickets.table.allStatuses}</SelectItem>
+            {STATUS_ORDER.map((status) => (
+              <SelectItem key={status} value={status}>
+                {STATUS_LABELS[status]}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
-        <Select value={activePriority} onValueChange={(v) => updateParam('priority', v)}>
+        <Select value={activePriority} onValueChange={(value) => updateParam('priority', value)}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="Prioridade" />
+            <SelectValue placeholder={copy.tickets.table.headers.priority} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="urgente">Urgente</SelectItem>
-            <SelectItem value="alta">Alta</SelectItem>
-            <SelectItem value="media">Média</SelectItem>
-            <SelectItem value="baixa">Baixa</SelectItem>
+            <SelectItem value="all">{copy.tickets.table.allPriorities}</SelectItem>
+            {PRIORITY_ORDER.map((priority) => (
+              <SelectItem key={priority} value={priority}>
+                {PRIORITY_LABELS[priority]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={activeAssignee} onValueChange={(value) => updateParam('assigneeId', value)}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder={copy.tickets.detail.assigneeTitle} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{copy.tickets.table.allAssignees}</SelectItem>
+            <SelectItem value="unassigned">{copy.tickets.table.unassigned}</SelectItem>
+            {users.map((user) => (
+              <SelectItem key={user.id} value={user.id}>
+                {user.displayName}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -164,20 +216,20 @@ export function TicketTable({ tickets }: Props) {
             className="text-muted-foreground gap-1.5"
           >
             <FilterX className="size-3.5" />
-            Limpar
+            {copy.common.clear}
           </Button>
         )}
 
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
-            {tickets.length} {tickets.length === 1 ? 'demanda' : 'demandas'}
+            {copy.tickets.table.count(tickets.length)}
           </span>
           <Button
             variant="outline"
             size="icon"
             onClick={() => exportCSV(tickets)}
-            title="Exportar CSV"
-            aria-label="Exportar CSV"
+            title={copy.tickets.table.exportCsv}
+            aria-label={copy.tickets.table.exportCsv}
             disabled={tickets.length === 0}
           >
             <Download />
@@ -185,29 +237,25 @@ export function TicketTable({ tickets }: Props) {
         </div>
       </div>
 
-      {/* Tabela */}
       {tickets.length === 0 ? (
         <div className="rounded-xl border bg-card py-16 text-center">
-          <div className="size-12 rounded-2xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
+          <div className="size-12 rounded-xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
             <Inbox className="size-5 text-muted-foreground" />
           </div>
           <p className="font-medium">
-            {hasActiveFilters
-              ? 'Nenhuma demanda encontrada com esses filtros'
-              : 'Nenhuma demanda registrada'}
+            {hasActiveFilters ? copy.tickets.table.emptyFiltered : copy.tickets.table.emptyDefault}
           </p>
           <p className="text-sm text-muted-foreground mt-1.5">
             {hasActiveFilters ? (
-              <>Ajuste os filtros ou{' '}
+              <>
+                {copy.tickets.table.emptyFilterHint.replace('limpe a busca.', '')}
                 <button onClick={clearFilters} className="text-primary hover:underline">
-                  limpe a busca
+                  {copy.tickets.table.clearSearch.toLowerCase()}
                 </button>
                 .
               </>
             ) : (
-              <>
-                Pressione <kbd className="kbd mx-0.5">N</kbd> para registrar a primeira.
-              </>
+              copy.tickets.table.emptyDefaultHint
             )}
           </p>
         </div>
@@ -218,22 +266,22 @@ export function TicketTable({ tickets }: Props) {
               <thead>
                 <tr className="border-b bg-muted/40 text-xs">
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                    Código
+                    {copy.tickets.table.headers.code}
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                    Demanda
+                    {copy.tickets.table.headers.title}
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                    Área
+                    {copy.tickets.table.headers.area}
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">
-                    Prioridade
+                    {copy.tickets.table.headers.priority}
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                    Status
+                    {copy.tickets.table.headers.status}
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
-                    Criada
+                    {copy.tickets.table.headers.createdAt}
                   </th>
                 </tr>
               </thead>
@@ -254,7 +302,7 @@ export function TicketTable({ tickets }: Props) {
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {ticket.subcategory}
                         {ticket.authorName && (
-                          <> · por {ticket.authorName.split(' ')[0]}</>
+                          <> · {copy.tickets.table.byAuthor(ticket.authorName.split(' ')[0])}</>
                         )}
                       </p>
                     </td>
@@ -268,7 +316,7 @@ export function TicketTable({ tickets }: Props) {
                       <StatusBadge status={ticket.status} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs hidden lg:table-cell whitespace-nowrap">
-                      {format(new Date(ticket.createdAt), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      {formatPtBrDate(ticket.createdAt, DATE_FORMATS.tableCreated)}
                     </td>
                   </tr>
                 ))}

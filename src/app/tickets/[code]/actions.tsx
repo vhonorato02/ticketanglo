@@ -4,14 +4,14 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Loader2,
-  UserCheck,
-  PlayCircle,
-  PauseCircle,
-  CheckCircle2,
   Archive,
+  CheckCircle2,
+  Loader2,
+  PauseCircle,
+  PlayCircle,
   RotateCcw,
   Settings2,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,74 +22,58 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { updateTicketStatus, updateTicketField } from '@/actions/tickets';
+import { updateTicketField, updateTicketStatus } from '@/actions/tickets';
 import { cn } from '@/lib/utils';
+import { copy } from '@/lib/copy';
+import { PRIORITY_LABELS, PRIORITY_ORDER, STATUS_TRANSITIONS } from '@/lib/constants';
 import type { Ticket, User } from '@/db/schema';
 
 interface TicketActionsProps {
   ticket: Ticket & {
-    author: { id: string; displayName: string; username: string } | undefined;
+    author: { id: string; displayName: string; username: string } | null;
     assignee: { id: string; displayName: string; username: string } | null;
   };
   users: Pick<User, 'id' | 'displayName' | 'isActive'>[];
   currentUserId: string;
 }
 
-const STATUS_TRANSITIONS: Record<Ticket['status'], Ticket['status'][]> = {
-  aberto: ['em_andamento', 'aguardando', 'resolvido', 'arquivado'],
-  em_andamento: ['aguardando', 'resolvido', 'arquivado', 'aberto'],
-  aguardando: ['em_andamento', 'resolvido', 'arquivado', 'aberto'],
-  resolvido: ['aberto', 'arquivado'],
-  arquivado: ['aberto'],
-};
-
 interface ActionMeta {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   variant: 'default' | 'outline' | 'ghost';
-  destructive?: boolean;
   confirm?: { title: string; description: string };
 }
 
 const STATUS_ACTIONS: Record<Ticket['status'], ActionMeta> = {
   aberto: {
-    label: 'Reabrir',
+    label: copy.tickets.detail.statusActions.aberto,
     icon: RotateCcw,
     variant: 'outline',
   },
   em_andamento: {
-    label: 'Iniciar atendimento',
+    label: copy.tickets.detail.statusActions.em_andamento,
     icon: PlayCircle,
     variant: 'outline',
   },
   aguardando: {
-    label: 'Marcar como aguardando',
+    label: copy.tickets.detail.statusActions.aguardando,
     icon: PauseCircle,
     variant: 'outline',
   },
   resolvido: {
-    label: 'Marcar como resolvido',
+    label: copy.tickets.detail.statusActions.resolvido,
     icon: CheckCircle2,
     variant: 'default',
   },
   arquivado: {
-    label: 'Arquivar',
+    label: copy.tickets.detail.statusActions.arquivado,
     icon: Archive,
     variant: 'ghost',
     confirm: {
-      title: 'Arquivar esta demanda?',
-      description:
-        'Demandas arquivadas saem do quadro Kanban e da lista padrão. Você pode desarquivá-la depois.',
+      title: copy.tickets.detail.archivedConfirmTitle,
+      description: copy.tickets.detail.archivedConfirmDescription,
     },
   },
-};
-
-const STATUS_LABELS_PT: Record<Ticket['status'], string> = {
-  aberto: 'Aberto',
-  em_andamento: 'Em andamento',
-  aguardando: 'Aguardando',
-  resolvido: 'Resolvido',
-  arquivado: 'Arquivado',
 };
 
 export function TicketActions({ ticket, users, currentUserId }: TicketActionsProps) {
@@ -101,14 +85,15 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
   const performStatusChange = (newStatus: Ticket['status']) => {
     setPendingStatus(newStatus);
     startTransition(async () => {
-      const res = await updateTicketStatus(ticket.code, newStatus);
+      const result = await updateTicketStatus(ticket.code, newStatus);
       setPendingStatus(null);
-      if (res && 'error' in res) {
-        toast.error(res.error);
-      } else {
-        toast.success(`Status alterado para "${STATUS_LABELS_PT[newStatus]}".`);
-        router.refresh();
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
       }
+
+      toast.success(copy.tickets.detail.statusUpdated(newStatus));
+      router.refresh();
     });
   };
 
@@ -123,38 +108,40 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
 
   const handleAssigneeChange = (userId: string) => {
     startTransition(async () => {
-      const res = await updateTicketField(
+      const result = await updateTicketField(
         ticket.code,
         'assigneeId',
         userId === 'none' ? null : userId,
       );
-      if (res && 'error' in res) {
-        toast.error(res.error);
-      } else {
-        const newAssignee = users.find((u) => u.id === userId);
-        toast.success(
-          userId === 'none'
-            ? 'Responsável removido.'
-            : `Atribuído a ${newAssignee?.displayName ?? 'usuário'}.`,
-        );
-        router.refresh();
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
       }
+
+      const newAssignee = users.find((user) => user.id === userId);
+      toast.success(
+        userId === 'none'
+          ? copy.tickets.detail.assigneeRemoved
+          : copy.tickets.detail.assigneeUpdated(newAssignee?.displayName ?? copy.users.roles.user),
+      );
+      router.refresh();
     });
   };
 
   const handlePriorityChange = (priority: string) => {
     startTransition(async () => {
-      const res = await updateTicketField(ticket.code, 'priority', priority);
-      if (res && 'error' in res) {
-        toast.error(res.error);
-      } else {
-        toast.success('Prioridade atualizada.');
-        router.refresh();
+      const result = await updateTicketField(ticket.code, 'priority', priority);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
       }
+
+      toast.success(copy.tickets.detail.priorityUpdated);
+      router.refresh();
     });
   };
 
-  const nextStatuses = STATUS_TRANSITIONS[ticket.status];
+  const nextStatuses = STATUS_TRANSITIONS[ticket.status] as readonly Ticket['status'][];
   const confirmMeta = confirmStatus ? STATUS_ACTIONS[confirmStatus] : null;
 
   return (
@@ -163,20 +150,21 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
         <div className="rounded-xl border bg-card p-4 space-y-5">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Settings2 className="size-3.5" />
-            Ações
+            {copy.tickets.detail.actionsTitle}
           </h3>
 
-          {/* Status transitions */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Mudar status</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {copy.tickets.detail.statusTitle}
+            </p>
             <div className="flex flex-col gap-1.5">
-              {nextStatuses.map((s) => {
-                const meta = STATUS_ACTIONS[s];
+              {nextStatuses.map((status) => {
+                const meta = STATUS_ACTIONS[status];
                 const Icon = meta.icon;
-                const isLoading = pendingStatus === s;
+                const isLoading = pendingStatus === status;
                 return (
                   <Button
-                    key={s}
+                    key={status}
                     variant={meta.variant}
                     size="sm"
                     className={cn(
@@ -184,7 +172,7 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
                       meta.variant === 'ghost' && 'text-muted-foreground',
                     )}
                     disabled={isPending}
-                    onClick={() => handleStatusChange(s)}
+                    onClick={() => handleStatusChange(status)}
                   >
                     {isLoading ? <Loader2 className="animate-spin" /> : <Icon />}
                     {meta.label}
@@ -196,22 +184,23 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
 
           <div className="h-px bg-border" />
 
-          {/* Assignee */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Responsável</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {copy.tickets.detail.assigneeTitle}
+            </p>
             <Select
               value={ticket.assigneeId ?? 'none'}
               onValueChange={handleAssigneeChange}
               disabled={isPending}
             >
               <SelectTrigger className="text-xs h-8">
-                <SelectValue placeholder="Sem responsável" />
+                <SelectValue placeholder={copy.tickets.detail.noAssignee} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Sem responsável</SelectItem>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.displayName}
+                <SelectItem value="none">{copy.tickets.detail.noAssignee}</SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.displayName}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -222,20 +211,21 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
                 variant="ghost"
                 size="sm"
                 className="w-full text-xs gap-1.5 h-7 text-muted-foreground"
-                disabled={isPending}
+                disabled={isPending || !currentUserId}
                 onClick={() => handleAssigneeChange(currentUserId)}
               >
                 <UserCheck className="size-3.5" />
-                Atribuir a mim
+                {copy.tickets.detail.assignToMe}
               </Button>
             )}
           </div>
 
           <div className="h-px bg-border" />
 
-          {/* Priority */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Prioridade</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {copy.tickets.detail.priorityTitle}
+            </p>
             <Select
               value={ticket.priority}
               onValueChange={handlePriorityChange}
@@ -245,37 +235,35 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="baixa">Baixa</SelectItem>
-                <SelectItem value="media">Média</SelectItem>
-                <SelectItem value="alta">Alta</SelectItem>
-                <SelectItem value="urgente">Urgente</SelectItem>
+                {PRIORITY_ORDER.map((priority) => (
+                  <SelectItem key={priority} value={priority}>
+                    {PRIORITY_LABELS[priority]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {/* Meta info */}
         <div className="rounded-xl border bg-card p-4 space-y-2.5 text-xs">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-            Detalhes
+            {copy.tickets.detail.metaTitle}
           </h3>
           <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Aberta por</span>
+            <span className="text-muted-foreground">{copy.tickets.detail.openedBy}</span>
             <span className="font-medium text-right truncate">
-              {ticket.author?.displayName ?? '—'}
+              {ticket.author?.displayName ?? copy.common.removedUser}
             </span>
           </div>
           {ticket.assignee && (
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Responsável</span>
-              <span className="font-medium text-right truncate">
-                {ticket.assignee.displayName}
-              </span>
+              <span className="text-muted-foreground">{copy.tickets.detail.assigneeTitle}</span>
+              <span className="font-medium text-right truncate">{ticket.assignee.displayName}</span>
             </div>
           )}
           {ticket.resolvedAt && (
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Resolvida em</span>
+              <span className="text-muted-foreground">{copy.tickets.detail.resolvedAt}</span>
               <span className="font-medium text-right">
                 {new Date(ticket.resolvedAt).toLocaleDateString('pt-BR')}
               </span>
@@ -286,10 +274,10 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
 
       <ConfirmDialog
         open={!!confirmStatus}
-        onOpenChange={(o) => !o && setConfirmStatus(null)}
+        onOpenChange={(open) => !open && setConfirmStatus(null)}
         title={confirmMeta?.confirm?.title ?? ''}
         description={confirmMeta?.confirm?.description ?? ''}
-        confirmLabel={confirmMeta?.label ?? 'Confirmar'}
+        confirmLabel={confirmMeta?.label ?? copy.common.confirm}
         variant={confirmStatus === 'arquivado' ? 'destructive' : 'default'}
         onConfirm={() => {
           if (confirmStatus) performStatusChange(confirmStatus);

@@ -7,6 +7,7 @@ import { db } from '@/db';
 import { comments, tickets, users } from '@/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
+import { copy } from '@/lib/copy';
 
 async function requireAuth() {
   const session = await auth();
@@ -22,7 +23,7 @@ export async function addComment(ticketCode: string, formData: FormData) {
   const user = await requireAuth();
 
   const parsed = commentSchema.safeParse({ body: formData.get('body') });
-  if (!parsed.success) return { error: 'Comentário inválido.' };
+  if (!parsed.success) return { error: copy.validation.invalidComment };
 
   const [ticket] = await db
     .select({ id: tickets.id })
@@ -30,7 +31,7 @@ export async function addComment(ticketCode: string, formData: FormData) {
     .where(eq(tickets.code, ticketCode))
     .limit(1);
 
-  if (!ticket) return { error: 'Ticket não encontrado.' };
+  if (!ticket) return { error: copy.validation.invalidTicket };
 
   await db.insert(comments).values({
     ticketId: ticket.id,

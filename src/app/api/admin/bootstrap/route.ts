@@ -2,33 +2,58 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/db';
 import { users } from '@/db/schema';
+import { copy } from '@/lib/copy';
+import { displayNameSchema, passwordSchema, usernameSchema } from '@/lib/validation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * Sincroniza o usuário master `anglo` com a senha padrão.
- * Protegido pelo header `Authorization: Bearer <AUTH_SECRET>`.
- *
- * Uso:
- *   curl -X POST https://<seu-dominio>/api/admin/bootstrap \
- *     -H "Authorization: Bearer $AUTH_SECRET"
- */
+const bootstrapSchema = {
+  username: usernameSchema,
+  displayName: displayNameSchema,
+  password: passwordSchema,
+};
+
+function getBootstrapAdmin() {
+  const username = process.env.BOOTSTRAP_ADMIN_USERNAME;
+  const displayName = process.env.BOOTSTRAP_ADMIN_DISPLAY_NAME;
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+
+  const parsedUsername = bootstrapSchema.username.safeParse(username);
+  const parsedDisplayName = bootstrapSchema.displayName.safeParse(displayName);
+  const parsedPassword = bootstrapSchema.password.safeParse(password);
+
+  if (!parsedUsername.success || !parsedDisplayName.success || !parsedPassword.success) {
+    return null;
+  }
+
+  return {
+    username: parsedUsername.data,
+    displayName: parsedDisplayName.data,
+    password: parsedPassword.data,
+  };
+}
+
 export async function POST(req: Request) {
   const auth = req.headers.get('authorization');
   const expected = `Bearer ${process.env.AUTH_SECRET ?? ''}`;
 
   if (!process.env.AUTH_SECRET || auth !== expected) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: copy.api.unauthorized }, { status: 401 });
   }
 
-  const passwordHash = await bcrypt.hash('tianglo26##', 12);
+  const admin = getBootstrapAdmin();
+  if (!admin) {
+    return NextResponse.json({ error: copy.api.missingBootstrapConfig }, { status: 503 });
+  }
+
+  const passwordHash = await bcrypt.hash(admin.password, 12);
 
   await db
     .insert(users)
     .values({
-      username: 'anglo',
-      displayName: 'Anglo Pindamonhangaba',
+      username: admin.username,
+      displayName: admin.displayName,
       passwordHash,
       isAdmin: true,
     })
@@ -36,14 +61,11 @@ export async function POST(req: Request) {
       target: users.username,
       set: {
         passwordHash,
-        displayName: 'Anglo Pindamonhangaba',
+        displayName: admin.displayName,
         isAdmin: true,
         isActive: true,
       },
     });
 
-  return NextResponse.json({
-    ok: true,
-    message: 'Usuário anglo sincronizado com a senha padrão.',
-  });
+  return NextResponse.json({ ok: true, message: copy.api.bootstrapOk });
 }

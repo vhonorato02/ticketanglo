@@ -1,67 +1,77 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Search,
-  LayoutDashboard,
-  Kanban,
-  List,
-  Settings,
-  Plus,
-  CornerDownLeft,
-  ArrowUp,
   ArrowDown,
+  ArrowUp,
+  CornerDownLeft,
+  Kanban,
+  LayoutDashboard,
+  List,
+  Plus,
+  Search,
+  Settings,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { copy } from '@/lib/copy';
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   onNewTicket: () => void;
+  isAdmin?: boolean;
 }
 
 const NAV_ITEMS = [
-  { label: 'Painel', href: '/', icon: LayoutDashboard },
-  { label: 'Quadro Kanban', href: '/kanban', icon: Kanban },
-  { label: 'Lista de demandas', href: '/tickets', icon: List },
-  { label: 'Configurações', href: '/configuracoes', icon: Settings },
-];
+  { label: copy.commandPalette.actions.dashboard, href: '/', icon: LayoutDashboard, admin: false },
+  { label: copy.commandPalette.actions.kanban, href: '/kanban', icon: Kanban, admin: false },
+  { label: copy.commandPalette.actions.tickets, href: '/tickets', icon: List, admin: false },
+  { label: copy.commandPalette.actions.settings, href: '/configuracoes', icon: Settings, admin: true },
+] as const;
 
-export function CommandPalette({ open, onClose, onNewTicket }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onClose,
+  onNewTicket,
+  isAdmin = false,
+}: CommandPaletteProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
 
-  const actions = [
-    {
-      label: 'Registrar nova demanda',
-      icon: Plus,
-      action: () => {
-        onClose();
-        onNewTicket();
+  const actions = useMemo(
+    () => [
+      {
+        label: copy.commandPalette.actions.newTicket,
+        icon: Plus,
+        action: () => {
+          onClose();
+          onNewTicket();
+        },
+        keywords: copy.commandPalette.keywords.newTicket,
+        group: copy.commandPalette.groups.actions,
       },
-      keywords: 'novo registrar criar ticket demanda',
-      group: 'Ações',
-    },
-    ...NAV_ITEMS.map((item) => ({
-      label: item.label,
-      icon: item.icon,
-      action: () => {
-        router.push(item.href);
-        onClose();
-      },
-      keywords: item.label.toLowerCase(),
-      group: 'Ir para',
-    })),
-  ];
+      ...NAV_ITEMS.filter((item) => !item.admin || isAdmin).map((item) => ({
+        label: item.label,
+        icon: item.icon,
+        action: () => {
+          router.push(item.href);
+          onClose();
+        },
+        keywords: item.label.toLowerCase(),
+        group: copy.commandPalette.groups.navigation,
+      })),
+    ],
+    [isAdmin, onClose, onNewTicket, router],
+  );
 
   const filtered = query
     ? actions.filter(
-        (a) =>
-          a.label.toLowerCase().includes(query.toLowerCase()) ||
-          a.keywords.includes(query.toLowerCase()),
+        (action) =>
+          action.label.toLowerCase().includes(query.toLowerCase()) ||
+          action.keywords.includes(query.toLowerCase()),
       )
     : actions;
 
@@ -70,15 +80,15 @@ export function CommandPalette({ open, onClose, onNewTicket }: CommandPalettePro
   }, [filtered.length]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelected((s) => Math.min(s + 1, filtered.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelected((s) => Math.max(s - 1, 0));
-      } else if (e.key === 'Enter' && filtered[selected]) {
-        e.preventDefault();
+    (event: React.KeyboardEvent) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelected((value) => Math.min(value + 1, filtered.length - 1));
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelected((value) => Math.max(value - 1, 0));
+      } else if (event.key === 'Enter' && filtered[selected]) {
+        event.preventDefault();
         filtered[selected].action();
         setQuery('');
       }
@@ -90,7 +100,6 @@ export function CommandPalette({ open, onClose, onNewTicket }: CommandPalettePro
     if (!open) setQuery('');
   }, [open]);
 
-  // Group items
   const groups = filtered.reduce<Record<string, typeof filtered>>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];
     acc[item.group].push(item);
@@ -100,35 +109,35 @@ export function CommandPalette({ open, onClose, onNewTicket }: CommandPalettePro
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="p-0 gap-0 max-w-lg overflow-hidden">
-        <DialogTitle className="sr-only">Buscar ação ou página</DialogTitle>
+        <DialogTitle className="sr-only">{copy.commandPalette.title}</DialogTitle>
         <div className="flex items-center border-b px-4 gap-3">
           <Search className="size-4 text-muted-foreground shrink-0" />
           <input
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="O que você quer fazer?"
+            placeholder={copy.commandPalette.placeholder}
             className="flex-1 py-3.5 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="kbd">esc</kbd>
+          <kbd className="kbd">{copy.commandPalette.hints.escape}</kbd>
         </div>
 
         <div className="py-1.5 max-h-[400px] overflow-y-auto">
           {filtered.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">
-              Nenhuma ação encontrada para “{query}”.
+              {copy.commandPalette.noResults(query)}
             </p>
           ) : (
-            Object.entries(groups).map(([group, items], gi) => {
-              let runningIndex = filtered.findIndex((f) => f === items[0]);
+            Object.entries(groups).map(([group, items], groupIndex) => {
+              let runningIndex = filtered.findIndex((item) => item === items[0]);
               return (
-                <div key={group} className={gi > 0 ? 'mt-1.5' : ''}>
+                <div key={group} className={groupIndex > 0 ? 'mt-1.5' : ''}>
                   <p className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     {group}
                   </p>
                   {items.map((item) => {
-                    const i = runningIndex++;
+                    const index = runningIndex++;
                     const Icon = item.icon;
                     return (
                       <button
@@ -138,17 +147,16 @@ export function CommandPalette({ open, onClose, onNewTicket }: CommandPalettePro
                           setQuery('');
                         }}
                         className={cn(
-                          'w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors text-left mx-1.5 rounded-md',
-                          'w-[calc(100%-0.75rem)]',
-                          i === selected
+                          'w-[calc(100%-0.75rem)] flex items-center gap-3 px-4 py-2 text-sm transition-colors text-left mx-1.5 rounded-md',
+                          index === selected
                             ? 'bg-accent text-accent-foreground'
                             : 'hover:bg-accent/50',
                         )}
-                        onMouseEnter={() => setSelected(i)}
+                        onMouseEnter={() => setSelected(index)}
                       >
                         <Icon className="size-4 text-muted-foreground shrink-0" />
                         <span className="flex-1">{item.label}</span>
-                        {i === selected && (
+                        {index === selected && (
                           <CornerDownLeft className="size-3 text-muted-foreground" />
                         )}
                       </button>
@@ -164,11 +172,11 @@ export function CommandPalette({ open, onClose, onNewTicket }: CommandPalettePro
           <span className="flex items-center gap-1.5">
             <ArrowUp className="size-3" />
             <ArrowDown className="size-3" />
-            navegar
+            {copy.commandPalette.hints.navigate}
           </span>
           <span className="flex items-center gap-1.5">
             <CornerDownLeft className="size-3" />
-            selecionar
+            {copy.commandPalette.hints.select}
           </span>
         </div>
       </DialogContent>

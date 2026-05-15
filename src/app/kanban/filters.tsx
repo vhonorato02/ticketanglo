@@ -1,7 +1,7 @@
 'use client';
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilterX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { AREA_OPTIONS } from '@/lib/constants';
+import { copy } from '@/lib/copy';
 
 interface Props {
   users: { id: string; displayName: string }[];
@@ -41,26 +43,30 @@ export function KanbanFilters({ users }: Props) {
 
   return (
     <div className="flex gap-2 flex-wrap items-center">
-      <Select value={activeArea} onValueChange={(v) => update('area', v)}>
+      <Select value={activeArea} onValueChange={(value) => update('area', value)}>
         <SelectTrigger className="w-36 h-8 text-xs">
-          <SelectValue placeholder="Área" />
+          <SelectValue placeholder={copy.kanban.filters.area} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Todas áreas</SelectItem>
-          <SelectItem value="TI">TI</SelectItem>
-          <SelectItem value="MKT">Marketing</SelectItem>
+          <SelectItem value="all">{copy.kanban.filters.allAreas}</SelectItem>
+          {AREA_OPTIONS.map((area) => (
+            <SelectItem key={area.value} value={area.value}>
+              {area.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 
-      <Select value={activeAssignee} onValueChange={(v) => update('assigneeId', v)}>
+      <Select value={activeAssignee} onValueChange={(value) => update('assigneeId', value)}>
         <SelectTrigger className="w-44 h-8 text-xs">
-          <SelectValue placeholder="Responsável" />
+          <SelectValue placeholder={copy.kanban.filters.assignee} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Todos responsáveis</SelectItem>
-          {users.map((u) => (
-            <SelectItem key={u.id} value={u.id}>
-              {u.displayName}
+          <SelectItem value="all">{copy.kanban.filters.allAssignees}</SelectItem>
+          <SelectItem value="unassigned">{copy.tickets.table.unassigned}</SelectItem>
+          {users.map((user) => (
+            <SelectItem key={user.id} value={user.id}>
+              {user.displayName}
             </SelectItem>
           ))}
         </SelectContent>
@@ -74,7 +80,7 @@ export function KanbanFilters({ users }: Props) {
           className="text-xs text-muted-foreground gap-1.5 h-8"
         >
           <FilterX className="size-3.5" />
-          Limpar
+          {copy.common.clear}
         </Button>
       )}
     </div>

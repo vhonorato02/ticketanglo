@@ -3,20 +3,22 @@
 import { useState, useTransition } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Lock, AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { copy } from '@/lib/copy';
 
 export default function LoginPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError('');
-    const form = e.currentTarget;
+
+    const form = event.currentTarget;
     const username = (form.elements.namedItem('username') as HTMLInputElement).value.trim();
     const password = (form.elements.namedItem('password') as HTMLInputElement).value;
 
@@ -28,60 +30,57 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError('Usuário ou senha incorretos.');
-      } else {
-        router.push('/');
-        router.refresh();
+        setError(copy.auth.errors.invalidCredentials);
+        return;
       }
+
+      router.push('/');
+      router.refresh();
     });
   };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center px-4 overflow-hidden bg-background">
-      {/* Background gradient */}
       <div
         className="absolute inset-0 -z-10 opacity-60 dark:opacity-40"
         style={{
           backgroundImage:
-            'radial-gradient(60% 50% at 50% 0%, color-mix(in oklch, var(--primary) 18%, transparent), transparent), radial-gradient(40% 40% at 80% 100%, color-mix(in oklch, var(--primary) 12%, transparent), transparent)',
+            'radial-gradient(60% 50% at 50% 0%, color-mix(in oklch, var(--primary) 18%, transparent), transparent), radial-gradient(40% 40% at 80% 100%, color-mix(in oklch, var(--success) 10%, transparent), transparent)',
         }}
       />
 
       <div className="w-full max-w-sm">
-        {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex size-12 rounded-2xl bg-primary items-center justify-center text-primary-foreground font-bold mb-5 shadow-lg shadow-primary/20">
+          <div className="inline-flex size-12 rounded-xl bg-primary items-center justify-center text-primary-foreground font-bold mb-5 shadow-lg shadow-primary/20">
             <Lock className="size-5" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">TicketAnglo</h1>
-          <p className="text-sm text-muted-foreground mt-1.5">
-            Colégio Anglo Pindamonhangaba
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">{copy.brand.name}</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">{copy.brand.institution}</p>
         </div>
 
-        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="username">Usuário</Label>
+              <Label htmlFor="username">{copy.auth.labels.username}</Label>
               <Input
                 id="username"
                 name="username"
                 autoComplete="username"
                 autoFocus
-                placeholder="seu.usuario"
+                placeholder={copy.auth.placeholders.username}
                 required
                 disabled={isPending}
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password">{copy.auth.labels.password}</Label>
               <Input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder={copy.auth.placeholders.password}
                 required
                 disabled={isPending}
               />
@@ -99,13 +98,13 @@ export default function LoginPage() {
 
             <Button type="submit" className="w-full mt-2" size="lg" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              {isPending ? 'Entrando...' : 'Entrar'}
+              {isPending ? copy.auth.buttons.pending : copy.auth.buttons.submit}
             </Button>
           </form>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Acesso restrito à equipe interna do colégio.
+          {copy.brand.restrictedAccess}
         </p>
       </div>
     </div>

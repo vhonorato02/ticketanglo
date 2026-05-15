@@ -1,47 +1,42 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-import { Users, Shield } from 'lucide-react';
+import { Shield, Users } from 'lucide-react';
 import { getUsers } from '@/actions/users';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserList } from './user-list';
 import { CreateUserForm } from './create-user-form';
 import { AccountSettings } from './account-settings';
+import { copy } from '@/lib/copy';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Configurações',
+  title: copy.metadata.settings,
 };
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
-  if (!session?.user || !(session.user as { isAdmin?: boolean }).isAdmin) redirect('/');
+  if (!session?.user || !session.user.isAdmin) redirect('/');
 
   const users = await getUsers();
-  const currentUser = session.user as {
-    id: string;
-    name?: string | null;
-    isAdmin?: boolean;
-  };
+  const currentUser = session.user;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground text-sm mt-1.5">
-          Gerencie usuários, permissões e a sua conta.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.users.page.title}</h1>
+        <p className="text-muted-foreground text-sm mt-1.5">{copy.users.page.description}</p>
       </header>
 
       <Tabs defaultValue="usuarios">
         <TabsList>
           <TabsTrigger value="usuarios" className="gap-1.5">
             <Users className="size-3.5" />
-            Usuários
+            {copy.users.page.usersTab}
           </TabsTrigger>
           <TabsTrigger value="minha-conta" className="gap-1.5">
             <Shield className="size-3.5" />
-            Minha conta
+            {copy.users.page.accountTab}
           </TabsTrigger>
         </TabsList>
 
@@ -49,9 +44,9 @@ export default async function ConfiguracoesPage() {
           <section>
             <div className="flex items-baseline justify-between mb-3">
               <div>
-                <h2 className="text-base font-semibold">Equipe ({users.length})</h2>
+                <h2 className="text-base font-semibold">{copy.users.page.teamTitle(users.length)}</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Acesso, permissões e redefinição de senhas.
+                  {copy.users.page.teamDescription}
                 </p>
               </div>
             </div>
@@ -60,9 +55,9 @@ export default async function ConfiguracoesPage() {
 
           <section>
             <div className="mb-3">
-              <h2 className="text-base font-semibold">Adicionar novo usuário</h2>
+              <h2 className="text-base font-semibold">{copy.users.page.addTitle}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Crie credenciais para um novo membro da equipe.
+                {copy.users.page.addDescription}
               </p>
             </div>
             <CreateUserForm />
@@ -73,7 +68,7 @@ export default async function ConfiguracoesPage() {
           <AccountSettings
             userId={currentUser.id}
             displayName={currentUser.name ?? ''}
-            isAdmin={currentUser.isAdmin ?? false}
+            isAdmin={currentUser.isAdmin}
           />
         </TabsContent>
       </Tabs>

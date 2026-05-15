@@ -5,6 +5,7 @@ import { Providers } from '@/components/providers';
 import { Nav } from '@/components/layout/nav';
 import { auth } from '@/auth';
 import { getUsers } from '@/actions/users';
+import { copy } from '@/lib/copy';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -14,11 +15,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'TicketAnglo',
-    template: '%s · TicketAnglo',
+    default: copy.brand.name,
+    template: `%s · ${copy.brand.name}`,
   },
-  description: 'Sistema interno de gestão de demandas — Colégio Anglo Pindamonhangaba',
-  applicationName: 'TicketAnglo',
+  description: copy.brand.description,
+  applicationName: copy.brand.name,
   formatDetection: { telephone: false, email: false, address: false },
 };
 
@@ -43,7 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         .filter((u) => u.isActive)
         .map((u) => ({ id: u.id, displayName: u.displayName }));
     } catch {
-      // DB indisponível — fallback gracioso
+      // A navegacao ainda deve renderizar quando o banco estiver indisponivel.
     }
   }
 

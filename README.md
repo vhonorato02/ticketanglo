@@ -1,154 +1,91 @@
 # TicketAnglo
 
-Sistema interno de gestão de demandas para TI e Marketing — Colégio Anglo Pindamonhangaba / Emílio Ribas.
+Sistema interno de gestão de demandas para TI e Marketing do Colégio Anglo Pindamonhangaba.
 
 ## Stack
 
-- **Next.js 15** (App Router, Server Components, Server Actions)
-- **TypeScript** estrito
-- **Neon Postgres** via `@neondatabase/serverless`
-- **Drizzle ORM** + migrations
-- **Auth.js v5** com Credentials provider (bcrypt + JWT)
-- **Tailwind CSS v4** + componentes shadcn-style
-- **@dnd-kit** — Kanban drag & drop
-- **sonner** — Toasts
-- **date-fns** — Datas em pt-BR
+- Next.js 15 App Router
+- React 19 e TypeScript estrito
+- Auth.js v5 com Credentials, JWT e bcrypt
+- Neon Postgres com Drizzle ORM
+- Tailwind CSS v4 e componentes Radix/shadcn-style
+- Kanban com `@dnd-kit`
+- Toasts com `sonner`
 
----
+## Princípios do projeto
 
-## Passo a passo: deploy na Vercel + Neon
+- Nenhuma senha real ou padrão versionada.
+- Textos de interface centralizados em `src/lib/copy.ts`.
+- Regras de domínio centralizadas em `src/lib/constants.ts`.
+- Server Actions com validação por Zod antes de gravar no banco.
+- Administração com criação, edição, permissão, desativação, redefinição de senha e exclusão segura de usuários.
+- Exclusão de usuário preserva demandas, comentários e histórico como registros de usuário removido.
 
-### 1. Clone e instale dependências
+## Ambiente
 
-```bash
-git clone <repo-url>
-cd ticketanglo
-npm install
-```
-
-### 2. Crie o banco de dados no Neon
-
-1. Acesse [neon.tech](https://neon.tech) e crie uma conta gratuita
-2. Crie um novo projeto (ex: `ticketanglo`)
-3. Na aba **Connection Details**, copie a **Connection string** (formato `postgresql://...`)
-
-### 3. Configure variáveis de ambiente locais
-
-```bash
-cp .env.example .env
-```
-
-Preencha o `.env`:
+Crie `.env` a partir de `.env.example` e preencha os valores reais:
 
 ```env
-DATABASE_URL="postgresql://user:pass@host.neon.tech/dbname?sslmode=require"
-AUTH_SECRET="gere-com-openssl-rand-base64-32"
+DATABASE_URL="postgresql://..."
+AUTH_SECRET="..."
 NEXTAUTH_URL="http://localhost:3000"
+
+BOOTSTRAP_ADMIN_USERNAME="admin"
+BOOTSTRAP_ADMIN_DISPLAY_NAME="Administrador"
+BOOTSTRAP_ADMIN_PASSWORD="defina-localmente"
 ```
 
-Para gerar o `AUTH_SECRET`:
+Gere o `AUTH_SECRET` com:
+
 ```bash
 openssl rand -base64 32
 ```
 
-### 4. Aplique o schema no banco
+## Desenvolvimento
 
 ```bash
+npm install
 npm run db:push
-```
-
-> Isso cria todas as tabelas automaticamente via Drizzle.
-
-### 5. Popule os usuários iniciais
-
-```bash
 npm run db:seed
-```
-
-Cria o usuário padrão:
-| Usuário | Senha | Admin |
-|---------|-------|-------|
-| anglo | tiango26## | Sim |
-
-**Crie os demais usuários após o primeiro login** via `/configuracoes`.
-
-### 6. Rode localmente
-
-```bash
 npm run dev
 ```
 
-Acesse: [http://localhost:3000](http://localhost:3000)
+`db:seed` cria ou sincroniza o primeiro administrador usando apenas as variáveis `BOOTSTRAP_ADMIN_*`. A senha nunca fica no repositório.
 
----
-
-### 7. Deploy na Vercel
-
-1. **Importe o repositório** no [vercel.com](https://vercel.com)
-2. Na aba **Storage**, adicione uma integração **Neon** (ou use a URL do banco já criado)
-3. Adicione as variáveis de ambiente no painel da Vercel:
-   - `DATABASE_URL` — connection string do Neon
-   - `AUTH_SECRET` — string aleatória segura
-   - `NEXTAUTH_URL` — URL do deploy (ex: `https://ticketanglo.vercel.app`)
-4. Clique em **Deploy**
-
-Após o deploy, rode o seed uma vez via terminal local apontando para o banco de produção:
-```bash
-DATABASE_URL="postgresql://..." npm run db:seed
-```
-
----
-
-## Comandos úteis
+## Scripts
 
 ```bash
-npm run dev          # Desenvolvimento local
-npm run build        # Build de produção
-npm run db:push      # Aplica schema no banco (sem migrations)
-npm run db:migrate   # Aplica migrations geradas pelo drizzle-kit
-npm run db:studio    # Abre o Drizzle Studio (interface visual do banco)
-npm run db:seed      # Cria usuários padrão
+npm run dev        # Servidor local
+npm run build      # Build de produção
+npm run lint       # ESLint
+npm run db:push    # Aplica schema Drizzle
+npm run db:migrate # Aplica migrations
+npm run db:studio  # Abre Drizzle Studio
+npm run db:seed    # Sincroniza primeiro admin via env
 ```
 
-## Atalhos de teclado
+## Estrutura
 
-| Tecla | Ação |
-|-------|------|
-| `N` | Novo ticket |
-| `K` ou `Cmd+K` | Command palette |
-| `/` | Foca campo de busca |
-| `Esc` | Fecha modal/palette |
-| `Cmd+Enter` | Envia comentário |
-
-## Estrutura de pastas
-
-```
+```txt
 src/
-├── app/                    # Páginas (App Router)
-│   ├── page.tsx            # Dashboard
-│   ├── kanban/             # Kanban board
-│   ├── tickets/            # Lista + detalhe
-│   └── configuracoes/      # Admin
-├── actions/                # Server Actions (tickets, comments, users)
-├── auth.ts                 # Auth.js config completa
-├── auth.config.ts          # Config edge-safe (middleware)
-├── components/
-│   ├── ui/                 # Componentes base (shadcn-style)
-│   ├── layout/             # Nav + ThemeToggle
-│   ├── tickets/            # TicketForm, TicketTable, badges
-│   └── kanban/             # KanbanBoard, Column, Card
-├── db/
-│   ├── schema.ts           # Schema Drizzle
-│   ├── index.ts            # Conexão Neon
-│   └── seed.ts             # Script de seed
-└── middleware.ts           # Proteção de rotas (edge)
+  actions/          Server Actions validadas
+  app/              Rotas do App Router
+  components/       UI, layout, tickets e kanban
+  db/               Schema, conexão e seed
+  lib/
+    constants.ts    Domínio: áreas, status, prioridades e transições
+    copy.ts         Textos visíveis e mensagens
+    format.ts       Formatação e helpers de apresentação
+    validation.ts   Schemas reutilizáveis
 ```
 
-## Modelo de dados
+## Bootstrap remoto
 
-| Tabela | Descrição |
-|--------|-----------|
-| `users` | Usuários internos (bcrypt + isAdmin) |
-| `tickets` | Demandas com código `TI-0001` / `MKT-0001` |
-| `comments` | Thread de comentários por ticket |
-| `ticket_history` | Log de auditoria de cada alteração |
+Existe `POST /api/admin/bootstrap` para sincronizar o primeiro administrador em ambientes remotos. Ele exige:
+
+- `Authorization: Bearer <AUTH_SECRET>`
+- `BOOTSTRAP_ADMIN_USERNAME`
+- `BOOTSTRAP_ADMIN_DISPLAY_NAME`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+
+Sem essas variáveis, a rota não cria credenciais.

@@ -1,33 +1,12 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { History } from 'lucide-react';
+import { HISTORY_FIELD_LABELS, HISTORY_VALUE_LABELS } from '@/lib/constants';
+import { copy } from '@/lib/copy';
 
-const FIELD_LABELS: Record<string, string> = {
-  status: 'status',
-  priority: 'prioridade',
-  responsável: 'responsável',
-  assigneeId: 'responsável',
-  title: 'título',
-  description: 'descrição',
-  origin: 'origem',
-  subcategory: 'subcategoria',
-};
-
-const VALUE_PT: Record<string, string> = {
-  aberto: 'Aberto',
-  em_andamento: 'Em andamento',
-  aguardando: 'Aguardando',
-  resolvido: 'Resolvido',
-  arquivado: 'Arquivado',
-  baixa: 'Baixa',
-  media: 'Média',
-  alta: 'Alta',
-  urgente: 'Urgente',
-};
-
-function humanize(val: string | null | undefined): string {
-  if (!val) return 'ninguém';
-  return VALUE_PT[val] ?? val;
+function humanize(value: string | null | undefined): string {
+  if (!value) return copy.tickets.history.noneValue;
+  return HISTORY_VALUE_LABELS[value as keyof typeof HISTORY_VALUE_LABELS] ?? value;
 }
 
 interface HistoryEntry {
@@ -44,28 +23,29 @@ export function HistoryLog({ history }: { history: HistoryEntry[] }) {
     <section className="space-y-3">
       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
         <History className="size-3.5" />
-        Histórico de alterações
+        {copy.tickets.history.title}
       </h2>
 
       <ol className="relative space-y-3 border-l border-border/70 pl-5 ml-1.5">
         {history.map((entry) => {
-          const fieldLabel = FIELD_LABELS[entry.field] ?? entry.field;
-          const oldVal = humanize(entry.oldValue);
-          const next = humanize(entry.newValue);
+          const fieldLabel =
+            HISTORY_FIELD_LABELS[entry.field as keyof typeof HISTORY_FIELD_LABELS] ?? entry.field;
+          const oldValue = humanize(entry.oldValue);
+          const nextValue = humanize(entry.newValue);
 
           return (
             <li key={entry.id} className="relative text-xs">
               <span className="absolute -left-[1.6875rem] top-1 size-2.5 rounded-full bg-background border-2 border-border" />
               <div className="text-muted-foreground leading-relaxed">
                 <span className="font-medium text-foreground">
-                  {entry.authorName ?? 'Sistema'}
+                  {entry.authorName ?? copy.common.removedUser}
                 </span>
-                {' alterou '}
+                {` ${copy.tickets.history.changed} `}
                 <span className="font-medium text-foreground">{fieldLabel}</span>
-                {' de '}
-                <span className="font-medium text-foreground">{oldVal}</span>
-                {' para '}
-                <span className="font-medium text-foreground">{next}</span>
+                {` ${copy.tickets.history.from} `}
+                <span className="font-medium text-foreground">{oldValue}</span>
+                {` ${copy.tickets.history.to} `}
+                <span className="font-medium text-foreground">{nextValue}</span>
                 <span className="text-muted-foreground/70">
                   {' · '}
                   <time

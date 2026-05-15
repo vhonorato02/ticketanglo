@@ -1,109 +1,169 @@
 'use client';
 
-import { useTransition, useRef, useState } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Plus, Eye, EyeOff } from 'lucide-react';
+import { Copy, Eye, EyeOff, Loader2, Plus, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createUser } from '@/actions/users';
+import { copy } from '@/lib/copy';
+
+function generateTemporaryPassword() {
+  const groups = [
+    'ABCDEFGHJKLMNPQRSTUVWXYZ',
+    'abcdefghijkmnopqrstuvwxyz',
+    '23456789',
+    '@#$%&*+-?',
+  ];
+  const all = groups.join('');
+  const bytes = new Uint32Array(16);
+  crypto.getRandomValues(bytes);
+
+  const required = groups.map((group, index) => group[bytes[index] % group.length]);
+  const rest = Array.from(bytes.slice(groups.length)).map((value) => all[value % all.length]);
+  const password = [...required, ...rest];
+
+  for (let index = password.length - 1; index > 0; index -= 1) {
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    const swapIndex = random[0] % (index + 1);
+    [password[index], password[swapIndex]] = [password[swapIndex], password[index]];
+  }
+
+  return password.join('');
+}
 
 export function CreateUserForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [showPwd, setShowPwd] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleGeneratePassword = () => {
+    if (!passwordRef.current) return;
+    passwordRef.current.value = generateTemporaryPassword();
+    setShowPassword(true);
+  };
+
+  const handleCopyPassword = async () => {
+    const value = passwordRef.current?.value;
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    toast.success(copy.users.form.copiedPassword);
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError('');
-    const fd = new FormData(e.currentTarget);
+    const formData = new FormData(event.currentTarget);
 
     startTransition(async () => {
-      const res = await createUser(fd);
-      if (res && 'error' in res) {
-        setError(res.error ?? 'Não foi possível criar o usuário.');
+      const result = await createUser(formData);
+      if (result && 'error' in result) {
+        setError(result.error ?? copy.validation.createUserFailed);
         return;
       }
-      const name = String(fd.get('displayName') ?? 'Usuário');
-      toast.success(`${name} foi adicionado à equipe.`);
+
+      const name = String(formData.get('displayName') ?? copy.users.roles.user);
+      toast.success(copy.users.form.added(name));
       formRef.current?.reset();
-      setShowPwd(false);
+      setShowPassword(false);
       router.refresh();
     });
   };
 
   return (
-    <form
-      ref={formRef}
-      onSubmit={handleSubmit}
-      className="rounded-xl border bg-card p-5 space-y-4"
-    >
+    <form ref={formRef} onSubmit={handleSubmit} className="rounded-xl border bg-card p-5 space-y-4">
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="username">Usuário</Label>
+          <Label htmlFor="username">{copy.users.form.username}</Label>
           <Input
             id="username"
             name="username"
-            placeholder="nome.sobrenome"
-            pattern="[a-z0-9_]+"
-            title="Apenas letras minúsculas, números e _"
+            placeholder={copy.users.form.placeholders.username}
+            pattern="[a-z0-9._-]+"
+            title={copy.validation.usernamePattern}
             required
             disabled={isPending}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="displayName">Nome exibido</Label>
+          <Label htmlFor="displayName">{copy.users.form.displayName}</Label>
           <Input
             id="displayName"
             name="displayName"
-            placeholder="Ex: Natália Costa"
+            placeholder={copy.users.form.placeholders.displayName}
             required
             disabled={isPending}
           />
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-[1fr_auto] gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="password">Senha provisória</Label>
+          <Label htmlFor="password">{copy.users.form.password}</Label>
           <div className="relative">
             <Input
+              ref={passwordRef}
               id="password"
               name="password"
-              type={showPwd ? 'text' : 'password'}
-              placeholder="Mínimo 6 caracteres"
-              minLength={6}
+              type={showPassword ? 'text' : 'password'}
+              placeholder={copy.users.form.placeholders.password}
+              minLength={8}
               required
               disabled={isPending}
-              className="pr-10"
+              className="pr-20"
             />
-            <button
-              type="button"
-              onClick={() => setShowPwd((s) => !s)}
-              tabIndex={-1}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
-              aria-label={showPwd ? 'Ocultar' : 'Mostrar'}
-            >
-              {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                tabIndex={-1}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+                aria-label={showPassword ? copy.users.form.hidePassword : copy.users.form.showPassword}
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyPassword}
+                tabIndex={-1}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+                aria-label={copy.users.form.copyPassword}
+              >
+                <Copy className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
-        <div className="flex items-end pb-1.5">
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              name="isAdmin"
-              value="true"
-              className="size-4 rounded border-input accent-primary cursor-pointer"
-              disabled={isPending}
-            />
-            <span>Conceder acesso de administrador</span>
-          </label>
+        <div className="flex items-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGeneratePassword}
+            disabled={isPending}
+            className="gap-1.5"
+          >
+            <Wand2 className="size-4" />
+            {copy.users.form.generatePassword}
+          </Button>
         </div>
       </div>
+
+      <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input
+          type="checkbox"
+          name="isAdmin"
+          value="true"
+          className="size-4 rounded border-input accent-primary cursor-pointer"
+          disabled={isPending}
+        />
+        <span>{copy.users.form.isAdmin}</span>
+      </label>
 
       {error && (
         <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg ring-1 ring-inset ring-destructive/20">
@@ -112,12 +172,10 @@ export function CreateUserForm() {
       )}
 
       <div className="flex items-center justify-between gap-2 pt-1">
-        <p className="text-xs text-muted-foreground">
-          O usuário poderá alterar a própria senha após o primeiro acesso.
-        </p>
+        <p className="text-xs text-muted-foreground">{copy.users.form.helper}</p>
         <Button type="submit" disabled={isPending} className="gap-1.5 shrink-0">
           {isPending ? <Loader2 className="animate-spin" /> : <Plus />}
-          Adicionar
+          {copy.users.form.add}
         </Button>
       </div>
     </form>

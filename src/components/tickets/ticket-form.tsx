@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,13 +26,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createTicket } from '@/actions/tickets';
-import { TI_SUBCATEGORIES, MKT_SUBCATEGORIES } from '@/lib/constants';
+import {
+  AREA_OPTIONS,
+  PRIORITY_LABELS,
+  PRIORITY_ORDER,
+  getSubcategories,
+  type Area,
+} from '@/lib/constants';
+import { copy } from '@/lib/copy';
 import type { User } from '@/db/schema';
 
 const schema = z.object({
   area: z.enum(['TI', 'MKT']),
-  title: z.string().min(1, 'Dê um título à demanda').max(80, 'Máximo de 80 caracteres'),
-  subcategory: z.string().min(1, 'Escolha uma subcategoria'),
+  title: z
+    .string()
+    .min(1, copy.tickets.form.validation.title)
+    .max(80, copy.tickets.form.validation.titleMax),
+  subcategory: z.string().min(1, copy.tickets.form.validation.subcategory),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']),
   description: z.string().optional(),
   origin: z.string().optional(),
@@ -46,6 +56,14 @@ interface TicketFormProps {
   onClose: () => void;
   users: Pick<User, 'id' | 'displayName'>[];
 }
+
+const defaultValues: FormData = {
+  priority: 'media',
+  area: 'TI',
+  title: '',
+  subcategory: '',
+  assigneeId: 'none',
+};
 
 export function TicketForm({ open, onClose, users }: TicketFormProps) {
   const router = useRouter();
@@ -61,50 +79,49 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { priority: 'media', area: 'TI' },
+    defaultValues,
   });
 
-  // Reset on close
   useEffect(() => {
     if (!open) {
-      const t = setTimeout(() => {
-        reset({ priority: 'media', area: 'TI' });
+      const timeout = setTimeout(() => {
+        reset(defaultValues);
         setShowExtra(false);
       }, 200);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timeout);
     }
   }, [open, reset]);
 
   const area = watch('area');
   const subcategory = watch('subcategory');
-  const subcategories = area === 'TI' ? TI_SUBCATEGORIES : MKT_SUBCATEGORIES;
+  const subcategories = getSubcategories(area as Area);
 
-  const handleAreaChange = (v: 'TI' | 'MKT') => {
-    setValue('area', v);
+  const handleAreaChange = (value: Area) => {
+    setValue('area', value);
     setValue('subcategory', '');
   };
 
   const onSubmit = (data: FormData) => {
     startTransition(async () => {
-      const fd = new FormData();
-      Object.entries(data).forEach(([k, v]) => {
-        if (v !== undefined && v !== '') fd.append(k, String(v));
+      const formData = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (value && value !== 'none') formData.append(key, String(value));
       });
 
-      const result = await createTicket(fd);
+      const result = await createTicket(formData);
       if ('error' in result) {
         toast.error(result.error);
         return;
       }
 
-      toast.success(`Demanda ${result.code} registrada.`, {
+      toast.success(copy.tickets.form.toast.created(result.code), {
         description: data.title,
         action: {
-          label: 'Abrir',
+          label: copy.tickets.form.toast.open,
           onClick: () => router.push(`/tickets/${result.code}`),
         },
       });
-      reset({ priority: 'media', area: 'TI' });
+      reset(defaultValues);
       setShowExtra(false);
       onClose();
       router.refresh();
@@ -124,44 +141,44 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
               <Sparkles className="size-4 text-primary" />
             </div>
             <div>
-              <DialogTitle>Nova demanda</DialogTitle>
-              <DialogDescription className="mt-1">
-                Registre uma solicitação para TI ou Marketing.
-              </DialogDescription>
+              <DialogTitle>{copy.tickets.form.title}</DialogTitle>
+              <DialogDescription className="mt-1">{copy.tickets.form.description}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Area + Subcategoria */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Área</Label>
+              <Label>{copy.tickets.form.fields.area}</Label>
               <Select value={area} onValueChange={handleAreaChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TI">TI</SelectItem>
-                  <SelectItem value="MKT">Marketing</SelectItem>
+                  {AREA_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Subcategoria</Label>
+              <Label>{copy.tickets.form.fields.subcategory}</Label>
               <Select
                 key={area}
                 value={subcategory ?? ''}
-                onValueChange={(v) => setValue('subcategory', v)}
+                onValueChange={(value) => setValue('subcategory', value)}
               >
                 <SelectTrigger aria-invalid={!!errors.subcategory}>
-                  <SelectValue placeholder="Selecione..." />
+                  <SelectValue placeholder={copy.tickets.form.placeholders.subcategory} />
                 </SelectTrigger>
                 <SelectContent>
-                  {subcategories.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {subcategories.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -172,77 +189,72 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
             </div>
           </div>
 
-          {/* Título */}
           <div className="space-y-1.5">
-            <Label htmlFor="title">Título</Label>
+            <Label htmlFor="title">{copy.tickets.form.fields.title}</Label>
             <Input
               id="title"
-              placeholder="Ex: Projetor da sala 12 não liga"
+              placeholder={copy.tickets.form.placeholders.title}
               maxLength={80}
               aria-invalid={!!errors.title}
               {...register('title')}
             />
-            {errors.title && (
-              <p className="text-xs text-destructive">{errors.title.message}</p>
-            )}
+            {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
           </div>
 
-          {/* Prioridade */}
           <div className="space-y-1.5">
-            <Label>Prioridade</Label>
+            <Label>{copy.tickets.form.fields.priority}</Label>
             <Select
               value={watch('priority')}
-              onValueChange={(v) => setValue('priority', v as FormData['priority'])}
+              onValueChange={(value) => setValue('priority', value as FormData['priority'])}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="baixa">Baixa</SelectItem>
-                <SelectItem value="media">Média</SelectItem>
-                <SelectItem value="alta">Alta</SelectItem>
-                <SelectItem value="urgente">Urgente</SelectItem>
+                {PRIORITY_ORDER.map((priority) => (
+                  <SelectItem key={priority} value={priority}>
+                    {PRIORITY_LABELS[priority]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Mais opções */}
           <button
             type="button"
-            onClick={() => setShowExtra(!showExtra)}
+            onClick={() => setShowExtra((value) => !value)}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
           >
             {showExtra ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            {showExtra ? 'Ocultar opções avançadas' : 'Opções avançadas'}
+            {showExtra ? copy.tickets.form.advanced.close : copy.tickets.form.advanced.open}
           </button>
 
           {showExtra && (
             <div className="space-y-4 border-t pt-4">
               <div className="space-y-1.5">
-                <Label htmlFor="origin">Origem</Label>
+                <Label htmlFor="origin">{copy.tickets.form.fields.origin}</Label>
                 <Input
                   id="origin"
-                  placeholder="Ex: WhatsApp da Profa. Júlia"
+                  placeholder={copy.tickets.form.placeholders.origin}
                   {...register('origin')}
                 />
-                <p className="text-xs text-muted-foreground">
-                  De onde a solicitação veio: pessoa, canal, sala.
-                </p>
+                <p className="text-xs text-muted-foreground">{copy.tickets.form.helper.origin}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Responsável inicial</Label>
+                <Label>{copy.tickets.form.fields.assignee}</Label>
                 <Select
-                  value={watch('assigneeId') ?? ''}
-                  onValueChange={(v) => setValue('assigneeId', v)}
+                  value={watch('assigneeId') ?? 'none'}
+                  onValueChange={(value) => setValue('assigneeId', value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Sem responsável" />
+                    <SelectValue placeholder={copy.tickets.form.placeholders.assignee} />
                   </SelectTrigger>
                   <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.displayName}
+                    <SelectItem value="none">{copy.tickets.form.placeholders.assignee}</SelectItem>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.displayName}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -250,10 +262,10 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="description">Descrição</Label>
+                <Label htmlFor="description">{copy.tickets.form.fields.description}</Label>
                 <Textarea
                   id="description"
-                  placeholder="Detalhes do problema, contexto, prazo desejado..."
+                  placeholder={copy.tickets.form.placeholders.description}
                   className="min-h-[100px]"
                   {...register('description')}
                 />
@@ -263,11 +275,11 @@ export function TicketForm({ open, onClose, users }: TicketFormProps) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
-              Cancelar
+              {copy.common.cancel}
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Registrar demanda
+              {copy.tickets.form.actions.submit}
             </Button>
           </div>
         </form>

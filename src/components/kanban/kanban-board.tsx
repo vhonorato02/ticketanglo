@@ -17,7 +17,8 @@ import { Inbox } from 'lucide-react';
 import { KanbanColumn } from './kanban-column';
 import { KanbanCard } from './kanban-card';
 import { updateTicketStatus } from '@/actions/tickets';
-import { STATUS_LABELS } from '@/lib/constants';
+import { BOARD_STATUSES } from '@/lib/constants';
+import { copy } from '@/lib/copy';
 import type { Ticket } from '@/db/schema';
 
 type Status = Ticket['status'];
@@ -35,8 +36,6 @@ type KanbanTicket = {
 interface KanbanBoardProps {
   initialTickets: KanbanTicket[];
 }
-
-const BOARD_STATUSES: Status[] = ['aberto', 'em_andamento', 'aguardando', 'resolvido'];
 
 export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
   const router = useRouter();
@@ -75,7 +74,7 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
       if (result && 'error' in result) {
         toast.error(result.error);
       } else {
-        toast.success(`${ticket.code} movido para "${STATUS_LABELS[newStatus]}".`);
+        toast.success(copy.kanban.moved(ticket.code, newStatus));
       }
       router.refresh();
     });
@@ -87,9 +86,9 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
         <div className="size-12 rounded-2xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
           <Inbox className="size-5 text-muted-foreground" />
         </div>
-        <p className="font-medium">Nenhuma demanda no quadro</p>
+        <p className="font-medium">{copy.kanban.emptyTitle}</p>
         <p className="text-sm text-muted-foreground mt-1.5">
-          Pressione <kbd className="kbd mx-0.5">N</kbd> para registrar a primeira.
+          {copy.kanban.emptyHint}
         </p>
       </div>
     );
@@ -98,7 +97,7 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 sm:-mx-6 px-4 sm:px-6 min-h-[calc(100vh-220px)]">
-        {BOARD_STATUSES.map((status) => (
+        {BOARD_STATUSES.map((status: Status) => (
           <KanbanColumn
             key={status}
             status={status}

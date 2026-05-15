@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { Loader2, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { changePassword } from '@/actions/users';
+import { copy } from '@/lib/copy';
 
 interface ChangePasswordDialogProps {
   open: boolean;
@@ -44,40 +45,41 @@ export function ChangePasswordDialog({
     }
   }, [open]);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError('');
 
-    const fd = new FormData(e.currentTarget);
-    const newPassword = String(fd.get('newPassword') ?? '');
-    const confirmPassword = String(fd.get('confirmPassword') ?? '');
+    const formData = new FormData(event.currentTarget);
+    const newPassword = String(formData.get('newPassword') ?? '');
+    const confirmPassword = String(formData.get('confirmPassword') ?? '');
 
-    if (newPassword.length < 6) {
-      setError('A senha precisa ter ao menos 6 caracteres.');
+    if (newPassword.length < 8) {
+      setError(copy.validation.passwordTooShort);
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('As senhas não coincidem.');
+      setError(copy.validation.passwordMismatch);
       return;
     }
 
-    fd.append('userId', targetUserId);
+    formData.append('userId', targetUserId);
 
     startTransition(async () => {
-      const res = await changePassword(fd);
-      if (res && 'error' in res) {
-        setError(res.error ?? 'Não foi possível alterar a senha.');
+      const result = await changePassword(formData);
+      if (result && 'error' in result) {
+        setError(result.error ?? copy.validation.passwordFailed);
         return;
       }
+
       toast.success(
-        isSelf ? 'Senha atualizada com sucesso.' : `Senha de ${targetUserName} atualizada.`,
+        isSelf ? copy.users.password.selfUpdated : copy.users.password.userUpdated(targetUserName),
       );
       onOpenChange(false);
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !isPending && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(value) => !isPending && onOpenChange(value)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-start gap-3">
@@ -85,13 +87,11 @@ export function ChangePasswordDialog({
               <KeyRound className="size-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <DialogTitle>
-                {isSelf ? 'Alterar minha senha' : `Redefinir senha`}
-              </DialogTitle>
+              <DialogTitle>{isSelf ? copy.users.password.changeMine : copy.users.password.reset}</DialogTitle>
               <DialogDescription className="mt-1">
                 {isSelf
-                  ? 'Defina uma nova senha para acessar sua conta.'
-                  : `Defina uma nova senha para ${targetUserName}.`}
+                  ? copy.users.password.descriptionSelf
+                  : copy.users.password.descriptionUser(targetUserName)}
               </DialogDescription>
             </div>
           </div>
@@ -99,14 +99,14 @@ export function ChangePasswordDialog({
 
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="newPassword">Nova senha</Label>
+            <Label htmlFor="newPassword">{copy.users.password.newPassword}</Label>
             <div className="relative">
               <Input
                 id="newPassword"
                 name="newPassword"
                 type={show ? 'text' : 'password'}
-                placeholder="Mínimo 6 caracteres"
-                minLength={6}
+                placeholder={copy.users.password.placeholder}
+                minLength={8}
                 autoComplete="new-password"
                 required
                 disabled={isPending}
@@ -114,10 +114,10 @@ export function ChangePasswordDialog({
               />
               <button
                 type="button"
-                onClick={() => setShow((s) => !s)}
+                onClick={() => setShow((value) => !value)}
                 tabIndex={-1}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
-                aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}
+                aria-label={show ? copy.users.form.hidePassword : copy.users.form.showPassword}
               >
                 {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
@@ -125,13 +125,13 @@ export function ChangePasswordDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
+            <Label htmlFor="confirmPassword">{copy.users.password.confirmPassword}</Label>
             <Input
               id="confirmPassword"
               name="confirmPassword"
               type={show ? 'text' : 'password'}
-              placeholder="Digite novamente"
-              minLength={6}
+              placeholder={copy.users.password.confirmPlaceholder}
+              minLength={8}
               autoComplete="new-password"
               required
               disabled={isPending}
@@ -151,11 +151,11 @@ export function ChangePasswordDialog({
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              Cancelar
+              {copy.common.cancel}
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Salvar nova senha
+              {copy.users.password.submit}
             </Button>
           </DialogFooter>
         </form>

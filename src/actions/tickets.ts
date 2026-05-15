@@ -4,13 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { db } from '@/db';
-import { tickets, ticketHistory, users } from '@/db/schema';
-import { eq, desc, like, ilike, or, and, gte, sql, count } from 'drizzle-orm';
+import { ticketHistory, tickets, users, type NewTicket } from '@/db/schema';
+import { and, count, desc, eq, gte, ilike, like, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { TI_SUBCATEGORIES, MKT_SUBCATEGORIES } from '@/lib/constants';
+import { copy } from '@/lib/copy';
+import { isValidSubcategory, type Area, type Priority, type Status } from '@/lib/constants';
 
-const tiSubs = TI_SUBCATEGORIES as readonly string[];
-const mktSubs = MKT_SUBCATEGORIES as readonly string[];
+const areaSchema = z.enum(['TI', 'MKT']);
+const prioritySchema = z.enum(['baixa', 'media', 'alta', 'urgente']);
+const statusSchema = z.enum(['aberto', 'em_andamento', 'aguardando', 'resolvido', 'arquivado']);
 
 async function requireAuth() {
   const session = await auth();
@@ -18,20 +20,28 @@ async function requireAuth() {
   return session.user;
 }
 
-async function generateCode(area: 'TI' | 'MKT'): Promise<string> {
-  const prefix = area;
+async function generateCode(area: Area): Promise<string> {
   const result = await db
     .select({ code: tickets.code })
     .from(tickets)
-    .where(like(tickets.code, `${prefix}-%`))
+    .where(like(tickets.code, `${area}-%`))
     .orderBy(desc(tickets.code))
     .limit(1);
 
-  if (result.length === 0) return `${prefix}-0001`;
+  if (result.length === 0) return `${area}-0001`;
 
   const last = result[0].code;
-  const num = parseInt(last.split('-')[1] ?? '0') + 1;
-  return `${prefix}-${num.toString().padStart(4, '0')}`;
+  const nextNumber = Number.parseInt(last.split('-')[1] ?? '0', 10) + 1;
+  return `${area}-${nextNumber.toString().padStart(4, '0')}`;
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    String(error.message).toLowerCase().includes('unique')
+  );
 }
 
 async function recordHistory(
@@ -44,7 +54,6 @@ async function recordHistory(
   await db.insert(ticketHistory).values({ ticketId, authorId, field, oldValue, newValue });
 }
 
-// Resolve UUID de usuário para displayName para o log de histórico
 async function resolveUserName(userId: string | null): Promise<string | null> {
   if (!userId) return null;
   const [user] = await db
@@ -52,25 +61,27 @@ async function resolveUserName(userId: string | null): Promise<string | null> {
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  return user?.displayName ?? null;
+  return user?.displayName ?? copy.common.removedUser;
 }
 
-// ─── Create ───────────────────────────────────────────────────────────────────
-
 const createSchema = z.object({
-  area: z.enum(['TI', 'MKT']),
-  title: z.string().min(1).max(80),
-  subcategory: z.string().min(1),
-  priority: z.enum(['baixa', 'media', 'alta', 'urgente']).default('media'),
-  description: z.string().optional(),
-  origin: z.string().optional(),
+  area: areaSchema,
+  title: z.string().trim().min(1).max(80),
+  subcategory: z.string().trim().min(1).max(80),
+  priority: prioritySchema.default('media'),
+  description: z.string().trim().max(4000).optional(),
+  origin: z.string().trim().max(120).optional(),
   assigneeId: z.string().uuid().optional().or(z.literal('')),
 });
+
+function normalizeOptionalText(value: string | undefined) {
+  return value && value.length > 0 ? value : null;
+}
 
 export async function createTicket(formData: FormData) {
   const user = await requireAuth();
 
-  const raw = {
+  const parsed = createSchema.safeParse({
     area: formData.get('area'),
     title: formData.get('title'),
     subcategory: formData.get('subcategory'),
@@ -78,43 +89,47 @@ export async function createTicket(formData: FormData) {
     description: formData.get('description') || undefined,
     origin: formData.get('origin') || undefined,
     assigneeId: formData.get('assigneeId') || undefined,
-  };
-
-  const parsed = createSchema.safeParse(raw);
-  if (!parsed.success) return { error: 'Dados inválidos.' };
-
-  const { area, title, subcategory, priority, description, origin, assigneeId } = parsed.data;
-
-  const validSubs = area === 'TI' ? tiSubs : mktSubs;
-  if (!validSubs.includes(subcategory)) return { error: 'Subcategoria inválida.' };
-
-  const code = await generateCode(area);
-
-  await db.insert(tickets).values({
-    code,
-    area,
-    title,
-    subcategory,
-    priority,
-    description: description || null,
-    origin: origin || null,
-    assigneeId: assigneeId || null,
-    authorId: user.id,
   });
 
-  revalidatePath('/');
-  revalidatePath('/tickets');
-  revalidatePath('/kanban');
-  return { code };
+  if (!parsed.success) return { error: copy.validation.invalidData };
+
+  const { area, title, subcategory, priority, description, origin, assigneeId } = parsed.data;
+  if (!isValidSubcategory(area, subcategory)) {
+    return { error: copy.validation.invalidSubcategory };
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = await generateCode(area);
+    try {
+      await db.insert(tickets).values({
+        code,
+        area,
+        title,
+        subcategory,
+        priority,
+        description: normalizeOptionalText(description),
+        origin: normalizeOptionalText(origin),
+        assigneeId: assigneeId || null,
+        authorId: user.id,
+      });
+
+      revalidatePath('/');
+      revalidatePath('/tickets');
+      revalidatePath('/kanban');
+      return { code };
+    } catch (error) {
+      if (attempt < 4 && isUniqueConstraintError(error)) continue;
+      throw error;
+    }
+  }
+
+  return { error: copy.validation.invalidData };
 }
 
-// ─── Update status ────────────────────────────────────────────────────────────
-
-export async function updateTicketStatus(
-  code: string,
-  newStatus: 'aberto' | 'em_andamento' | 'aguardando' | 'resolvido' | 'arquivado',
-) {
+export async function updateTicketStatus(code: string, newStatus: Status) {
   const user = await requireAuth();
+  const parsedStatus = statusSchema.safeParse(newStatus);
+  if (!parsedStatus.success) return { error: copy.validation.invalidData };
 
   const [ticket] = await db
     .select({ id: tickets.id, status: tickets.status })
@@ -122,20 +137,20 @@ export async function updateTicketStatus(
     .where(eq(tickets.code, code))
     .limit(1);
 
-  if (!ticket) return { error: 'Ticket não encontrado.' };
-  if (ticket.status === newStatus) return { ok: true };
+  if (!ticket) return { error: copy.validation.invalidTicket };
+  if (ticket.status === parsedStatus.data) return { ok: true };
 
   const now = new Date();
   await db
     .update(tickets)
     .set({
-      status: newStatus,
+      status: parsedStatus.data,
       updatedAt: now,
-      resolvedAt: newStatus === 'resolvido' ? now : null,
+      resolvedAt: parsedStatus.data === 'resolvido' ? now : null,
     })
     .where(eq(tickets.code, code));
 
-  await recordHistory(ticket.id, user.id, 'status', ticket.status, newStatus);
+  await recordHistory(ticket.id, user.id, 'status', ticket.status, parsedStatus.data);
 
   revalidatePath('/');
   revalidatePath('/tickets');
@@ -144,47 +159,101 @@ export async function updateTicketStatus(
   return { ok: true };
 }
 
-// ─── Update field ─────────────────────────────────────────────────────────────
+const updateFieldSchema = z.object({
+  field: z.enum(['title', 'description', 'origin', 'priority', 'assigneeId', 'subcategory']),
+  value: z.string().nullable(),
+});
 
-export async function updateTicketField(
-  code: string,
-  field: string,
+async function normalizeFieldValue(
+  ticket: { area: Area },
+  field: z.infer<typeof updateFieldSchema>['field'],
   value: string | null,
 ) {
-  const user = await requireAuth();
-
-  const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
-  if (!ticket) return { error: 'Ticket não encontrado.' };
-
-  const allowedFields = ['title', 'description', 'origin', 'priority', 'assigneeId', 'subcategory'];
-  if (!allowedFields.includes(field)) return { error: 'Campo inválido.' };
-
-  const rawOld = (ticket as Record<string, unknown>)[field];
-  const oldValue = rawOld != null ? String(rawOld) : null;
-
-  await db
-    .update(tickets)
-    .set({ [field]: value, updatedAt: new Date() })
-    .where(eq(tickets.code, code));
-
-  // Para responsável, grava o nome no histórico (não o UUID)
-  if (field === 'assigneeId') {
-    const [oldName, newName] = await Promise.all([
-      resolveUserName(oldValue),
-      resolveUserName(value),
-    ]);
-    await recordHistory(ticket.id, user.id, 'responsável', oldName, newName);
-  } else {
-    await recordHistory(ticket.id, user.id, field, oldValue, value);
+  if (field === 'title') {
+    const parsed = z.string().trim().min(1).max(80).safeParse(value);
+    return parsed.success ? { value: parsed.data } : { error: copy.validation.invalidData };
   }
 
+  if (field === 'description') {
+    const parsed = z.string().trim().max(4000).nullable().safeParse(value);
+    return parsed.success
+      ? { value: normalizeOptionalText(parsed.data ?? undefined) }
+      : { error: copy.validation.invalidData };
+  }
+
+  if (field === 'origin') {
+    const parsed = z.string().trim().max(120).nullable().safeParse(value);
+    return parsed.success
+      ? { value: normalizeOptionalText(parsed.data ?? undefined) }
+      : { error: copy.validation.invalidData };
+  }
+
+  if (field === 'priority') {
+    const parsed = prioritySchema.safeParse(value);
+    return parsed.success ? { value: parsed.data } : { error: copy.validation.invalidData };
+  }
+
+  if (field === 'subcategory') {
+    const parsed = z.string().trim().min(1).max(80).safeParse(value);
+    if (!parsed.success || !isValidSubcategory(ticket.area, parsed.data)) {
+      return { error: copy.validation.invalidSubcategory };
+    }
+    return { value: parsed.data };
+  }
+
+  if (field === 'assigneeId') {
+    if (!value) return { value: null };
+    const parsed = z.string().uuid().safeParse(value);
+    if (!parsed.success) return { error: copy.validation.invalidData };
+
+    const [assignee] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, parsed.data), eq(users.isActive, true)))
+      .limit(1);
+    return assignee ? { value: assignee.id } : { error: copy.validation.invalidUser };
+  }
+
+  return { error: copy.validation.invalidField };
+}
+
+export async function updateTicketField(code: string, field: string, value: string | null) {
+  const user = await requireAuth();
+  const parsed = updateFieldSchema.safeParse({ field, value });
+  if (!parsed.success) return { error: copy.validation.invalidField };
+
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
+  if (!ticket) return { error: copy.validation.invalidTicket };
+
+  const normalized = await normalizeFieldValue(ticket, parsed.data.field, parsed.data.value);
+  if ('error' in normalized) return { error: normalized.error };
+
+  const rawOld = ticket[parsed.data.field];
+  const oldValue = rawOld != null ? String(rawOld) : null;
+  const newValue = normalized.value != null ? String(normalized.value) : null;
+  if (oldValue === newValue) return { ok: true };
+
+  const updates: Partial<NewTicket> = { updatedAt: new Date() };
+  Object.assign(updates, { [parsed.data.field]: normalized.value });
+
+  await db.update(tickets).set(updates).where(eq(tickets.code, code));
+
+  if (parsed.data.field === 'assigneeId') {
+    const [oldName, newName] = await Promise.all([
+      resolveUserName(oldValue),
+      resolveUserName(newValue),
+    ]);
+    await recordHistory(ticket.id, user.id, 'responsavel', oldName, newName);
+  } else {
+    await recordHistory(ticket.id, user.id, parsed.data.field, oldValue, newValue);
+  }
+
+  revalidatePath('/');
   revalidatePath(`/tickets/${code}`);
   revalidatePath('/tickets');
   revalidatePath('/kanban');
   return { ok: true };
 }
-
-// ─── Queries ──────────────────────────────────────────────────────────────────
 
 export type TicketRow = Awaited<ReturnType<typeof getTickets>>[number];
 
@@ -201,13 +270,9 @@ export async function getTickets(filters?: {
   const offset = (page - 1) * limit;
 
   const conditions = [];
-  if (area && area !== 'all') conditions.push(eq(tickets.area, area as 'TI' | 'MKT'));
-  if (status && status !== 'all')
-    conditions.push(
-      eq(tickets.status, status as 'aberto' | 'em_andamento' | 'aguardando' | 'resolvido' | 'arquivado'),
-    );
-  if (priority && priority !== 'all')
-    conditions.push(eq(tickets.priority, priority as 'baixa' | 'media' | 'alta' | 'urgente'));
+  if (area && area !== 'all') conditions.push(eq(tickets.area, area as Area));
+  if (status && status !== 'all') conditions.push(eq(tickets.status, status as Status));
+  if (priority && priority !== 'all') conditions.push(eq(tickets.priority, priority as Priority));
   if (assigneeId && assigneeId !== 'all') {
     if (assigneeId === 'unassigned') {
       conditions.push(sql`${tickets.assigneeId} IS NULL`);
@@ -257,23 +322,23 @@ export async function getTicket(code: string) {
   const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
   if (!ticket) return null;
 
-  const [author] = await db
-    .select({ id: users.id, displayName: users.displayName, username: users.username })
-    .from(users)
-    .where(eq(users.id, ticket.authorId))
-    .limit(1);
+  const [author] = ticket.authorId
+    ? await db
+        .select({ id: users.id, displayName: users.displayName, username: users.username })
+        .from(users)
+        .where(eq(users.id, ticket.authorId))
+        .limit(1)
+    : [null];
 
-  let assignee = null;
-  if (ticket.assigneeId) {
-    const [a] = await db
-      .select({ id: users.id, displayName: users.displayName, username: users.username })
-      .from(users)
-      .where(eq(users.id, ticket.assigneeId))
-      .limit(1);
-    assignee = a ?? null;
-  }
+  const [assignee] = ticket.assigneeId
+    ? await db
+        .select({ id: users.id, displayName: users.displayName, username: users.username })
+        .from(users)
+        .where(eq(users.id, ticket.assigneeId))
+        .limit(1)
+    : [null];
 
-  return { ...ticket, author, assignee };
+  return { ...ticket, author: author ?? null, assignee: assignee ?? null };
 }
 
 export async function getDashboardStats() {
@@ -316,8 +381,14 @@ export async function getDashboardStats() {
 export async function getKanbanTickets(filters?: { area?: string; assigneeId?: string }) {
   const { area, assigneeId } = filters ?? {};
   const conditions = [];
-  if (area && area !== 'all') conditions.push(eq(tickets.area, area as 'TI' | 'MKT'));
-  if (assigneeId && assigneeId !== 'all') conditions.push(eq(tickets.assigneeId, assigneeId));
+  if (area && area !== 'all') conditions.push(eq(tickets.area, area as Area));
+  if (assigneeId && assigneeId !== 'all') {
+    if (assigneeId === 'unassigned') {
+      conditions.push(sql`${tickets.assigneeId} IS NULL`);
+    } else {
+      conditions.push(eq(tickets.assigneeId, assigneeId));
+    }
+  }
   conditions.push(
     or(
       eq(tickets.status, 'aberto'),

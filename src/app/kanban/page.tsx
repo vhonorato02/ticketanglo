@@ -1,11 +1,12 @@
-import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { getKanbanTickets } from '@/actions/tickets';
 import { getUsers } from '@/actions/users';
+import { KanbanBoard } from '@/components/kanban/kanban-board';
+import { copy } from '@/lib/copy';
 import { KanbanFilters } from './filters';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Quadro' };
+export const metadata = { title: copy.metadata.kanban };
 
 interface PageProps {
   searchParams: Promise<{ area?: string; assigneeId?: string }>;
@@ -18,15 +19,15 @@ export default async function KanbanPage({ searchParams }: PageProps) {
     getUsers(),
   ]);
 
-  const activeUsers = users.filter((u) => u.isActive);
+  const activeUsers = users.filter((user) => user.isActive);
 
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Quadro</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{copy.kanban.page.title}</h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            Arraste demandas entre as colunas para mover seu status.
+            {copy.kanban.page.description}
           </p>
         </div>
         <KanbanFilters users={activeUsers} />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { copy } from '@/lib/copy';
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
@@ -29,8 +30,8 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={toggle}
-      aria-label={isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-      title={isDark ? 'Tema claro' : 'Tema escuro'}
+      aria-label={isDark ? copy.theme.switchToLight : copy.theme.switchToDark}
+      title={isDark ? copy.theme.light : copy.theme.dark}
       suppressHydrationWarning
     >
       {mounted ? (

@@ -1,19 +1,19 @@
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import {
-  Monitor,
-  Megaphone,
-  Zap,
-  Clock,
-  CheckCircle2,
   ArrowRight,
+  CheckCircle2,
+  Clock,
   Inbox,
+  Megaphone,
+  Monitor,
+  Zap,
 } from 'lucide-react';
 import { auth } from '@/auth';
-import { StatusBadge, PriorityBadge, AreaBadge } from '@/components/tickets/ticket-badge';
 import { getDashboardStats, getTickets } from '@/actions/tickets';
+import { AreaBadge, PriorityBadge, StatusBadge } from '@/components/tickets/ticket-badge';
 import { cn } from '@/lib/utils';
+import { copy } from '@/lib/copy';
+import { capitalizeFirst, DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,9 +45,7 @@ function StatCard({ label, value, icon, href, accent = 'default', empty }: StatC
             {label}
           </p>
           <p className="text-3xl font-semibold mt-1.5 tabular-nums tracking-tight">{value}</p>
-          {value === 0 && empty && (
-            <p className="text-xs text-muted-foreground mt-1">{empty}</p>
-          )}
+          {value === 0 && empty && <p className="text-xs text-muted-foreground mt-1">{empty}</p>}
         </div>
         <div
           className={cn(
@@ -65,14 +63,25 @@ function StatCard({ label, value, icon, href, accent = 'default', empty }: StatC
 function getGreeting(name: string) {
   const hour = new Date().getHours();
   const firstName = name.split(' ')[0];
-  if (hour < 12) return `Bom dia, ${firstName}`;
-  if (hour < 18) return `Boa tarde, ${firstName}`;
-  return `Boa noite, ${firstName}`;
+  if (hour < 12) return copy.dashboard.greeting.morning(firstName);
+  if (hour < 18) return copy.dashboard.greeting.afternoon(firstName);
+  return copy.dashboard.greeting.evening(firstName);
+}
+
+function EmptyHint({ text }: { text: string }) {
+  const [before, after] = text.split('N');
+  return (
+    <>
+      {before}
+      <kbd className="kbd mx-0.5">N</kbd>
+      {after}
+    </>
+  );
 }
 
 export default async function DashboardPage() {
   const session = await auth();
-  const userName = session?.user?.name ?? 'Usuário';
+  const userName = session?.user?.name ?? copy.dashboard.greeting.fallbackName;
 
   const [stats, recentTickets] = await Promise.all([
     getDashboardStats(),
@@ -80,13 +89,10 @@ export default async function DashboardPage() {
   ]);
 
   const recent = recentTickets.slice(0, 8);
-
-  const rawDate = format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR });
-  const today = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+  const today = capitalizeFirst(formatPtBrDate(new Date(), DATE_FORMATS.dashboardDay));
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
           {getGreeting(userName)}
@@ -94,73 +100,71 @@ export default async function DashboardPage() {
         <p className="text-muted-foreground text-sm mt-1.5">{today}</p>
       </div>
 
-      {/* Cards de métricas */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatCard
-          label="Abertos TI"
+          label={copy.dashboard.stats.openTi}
           value={Number(stats.abertosTI)}
           icon={<Monitor className="size-4" />}
           href="/tickets?area=TI&status=aberto"
-          empty="Tudo em ordem."
+          empty={copy.dashboard.stats.allClear}
         />
         <StatCard
-          label="Abertos MKT"
+          label={copy.dashboard.stats.openMkt}
           value={Number(stats.abertosMKT)}
           icon={<Megaphone className="size-4" />}
           href="/tickets?area=MKT&status=aberto"
-          empty="Tudo em ordem."
+          empty={copy.dashboard.stats.allClear}
         />
         <StatCard
-          label="Urgentes"
+          label={copy.dashboard.stats.urgent}
           value={Number(stats.urgentes)}
           icon={<Zap className="size-4" />}
           href="/tickets?priority=urgente"
           accent="destructive"
-          empty="Sem urgências."
+          empty={copy.dashboard.stats.noUrgencies}
         />
         <StatCard
-          label="Aguardando"
+          label={copy.dashboard.stats.waiting}
           value={Number(stats.aguardando)}
           icon={<Clock className="size-4" />}
           href="/tickets?status=aguardando"
           accent="warning"
-          empty="Sem bloqueios."
+          empty={copy.dashboard.stats.noBlocks}
         />
         <StatCard
-          label="Resolvidos na semana"
+          label={copy.dashboard.stats.resolvedWeek}
           value={Number(stats.resolvidosSemana)}
           icon={<CheckCircle2 className="size-4" />}
           href="/tickets?status=resolvido"
           accent="success"
-          empty="Nada ainda esta semana."
+          empty={copy.dashboard.stats.noneThisWeek}
         />
       </div>
 
-      {/* Últimas demandas */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Últimas demandas</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{copy.dashboard.recent.title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Atividade mais recente do colégio
+              {copy.dashboard.recent.description}
             </p>
           </div>
           <Link
             href="/tickets"
             className="text-sm text-primary hover:underline flex items-center gap-1 font-medium"
           >
-            Ver todas <ArrowRight className="size-3.5" />
+            {copy.dashboard.recent.viewAll} <ArrowRight className="size-3.5" />
           </Link>
         </div>
 
         {recent.length === 0 ? (
           <div className="rounded-xl border bg-card py-16 text-center">
-            <div className="size-12 rounded-2xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
+            <div className="size-12 rounded-xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
               <Inbox className="size-5 text-muted-foreground" />
             </div>
-            <p className="font-medium">Nenhuma demanda registrada ainda</p>
+            <p className="font-medium">{copy.dashboard.recent.emptyTitle}</p>
             <p className="text-sm text-muted-foreground mt-1.5">
-              Pressione <kbd className="kbd mx-0.5">N</kbd> para registrar a primeira.
+              <EmptyHint text={copy.dashboard.recent.emptyHint} />
             </p>
           </div>
         ) : (
@@ -170,22 +174,22 @@ export default async function DashboardPage() {
                 <thead>
                   <tr className="border-b bg-muted/40 text-xs">
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      Código
+                      {copy.tickets.table.headers.code}
                     </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      Demanda
+                      {copy.tickets.table.headers.title}
                     </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                      Área
+                      {copy.tickets.table.headers.area}
                     </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">
-                      Prioridade
+                      {copy.tickets.table.headers.priority}
                     </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
-                      Status
+                      {copy.tickets.table.headers.status}
                     </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
-                      Criada
+                      {copy.tickets.table.headers.createdAt}
                     </th>
                   </tr>
                 </thead>
@@ -224,9 +228,7 @@ export default async function DashboardPage() {
                         <StatusBadge status={ticket.status} />
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">
-                        {format(new Date(ticket.createdAt), "dd 'de' MMM 'às' HH:mm", {
-                          locale: ptBR,
-                        })}
+                        {formatPtBrDate(ticket.createdAt, DATE_FORMATS.dashboardRecent)}
                       </td>
                     </tr>
                   ))}

@@ -1,11 +1,13 @@
 import { Suspense } from 'react';
 import { getTickets } from '@/actions/tickets';
+import { getUsers } from '@/actions/users';
 import { TicketTable } from '@/components/tickets/ticket-table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { copy } from '@/lib/copy';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Demandas' };
+export const metadata = { title: copy.metadata.tickets };
 
 interface PageProps {
   searchParams: Promise<{
@@ -19,16 +21,19 @@ interface PageProps {
 }
 
 async function TicketList({ searchParams }: { searchParams: Awaited<PageProps['searchParams']> }) {
-  const tickets = await getTickets({
-    area: searchParams.area,
-    status: searchParams.status,
-    priority: searchParams.priority,
-    assigneeId: searchParams.assigneeId,
-    search: searchParams.search,
-    page: searchParams.page ? parseInt(searchParams.page) : 1,
-  });
+  const [tickets, users] = await Promise.all([
+    getTickets({
+      area: searchParams.area,
+      status: searchParams.status,
+      priority: searchParams.priority,
+      assigneeId: searchParams.assigneeId,
+      search: searchParams.search,
+      page: searchParams.page ? Number.parseInt(searchParams.page, 10) : 1,
+    }),
+    getUsers(),
+  ]);
 
-  return <TicketTable tickets={tickets} />;
+  return <TicketTable tickets={tickets} users={users.filter((user) => user.isActive)} />;
 }
 
 export default async function TicketsPage({ searchParams }: PageProps) {
@@ -37,10 +42,8 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Demandas</h1>
-        <p className="text-muted-foreground text-sm mt-1.5">
-          Filtre, busque e gerencie todas as demandas do colégio.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.tickets.page.title}</h1>
+        <p className="text-muted-foreground text-sm mt-1.5">{copy.tickets.page.description}</p>
       </div>
 
       <Suspense

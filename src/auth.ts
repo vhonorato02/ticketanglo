@@ -6,6 +6,7 @@ import { users } from './db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { copy } from '@/lib/copy';
 
 const credentialsSchema = z.object({
   username: z.string().min(1),
@@ -17,8 +18,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        username: { label: 'Usuário' },
-        password: { label: 'Senha', type: 'password' },
+        username: { label: copy.auth.credentials.username },
+        password: { label: copy.auth.credentials.password, type: 'password' },
       },
       async authorize(credentials) {
         const parsed = credentialsSchema.safeParse(credentials);

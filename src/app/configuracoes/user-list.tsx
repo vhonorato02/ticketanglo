@@ -2,15 +2,16 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
-  Shield,
-  ShieldOff,
   KeyRound,
   MoreVertical,
+  Pencil,
+  Shield,
   ShieldCheck,
+  ShieldOff,
+  Trash2,
+  UserCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -24,7 +25,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ChangePasswordDialog } from '@/components/change-password-dialog';
-import { toggleUserActive } from '@/actions/users';
+import { deleteUser, setUserAdmin, toggleUserActive } from '@/actions/users';
+import { copy } from '@/lib/copy';
+import { DATE_FORMATS, formatPtBrDate, initials } from '@/lib/format';
+import { EditUserDialog } from './edit-user-dialog';
 import type { User } from '@/db/schema';
 
 type UserItem = Pick<User, 'id' | 'username' | 'displayName' | 'isAdmin' | 'isActive' | 'createdAt'>;
@@ -34,40 +38,107 @@ interface UserListProps {
   currentUserId: string;
 }
 
-function initials(name: string) {
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '?'
-  );
+type ConfirmState =
+  | { type: 'toggle'; user: UserItem }
+  | { type: 'delete'; user: UserItem }
+  | { type: 'role'; user: UserItem; nextAdmin: boolean };
+
+function getConfirmContent(state: ConfirmState | null) {
+  if (!state) {
+    return { title: '', description: '', confirmLabel: copy.common.confirm, destructive: false };
+  }
+
+  if (state.type === 'delete') {
+    return {
+      title: copy.users.list.deleteTitle(state.user.displayName),
+      description: copy.users.list.deleteDescription,
+      confirmLabel: copy.users.list.delete,
+      destructive: true,
+    };
+  }
+
+  if (state.type === 'role') {
+    return {
+      title: copy.users.list.roleTitle(state.user.displayName, state.user.isAdmin),
+      description: copy.users.list.roleDescription,
+      confirmLabel: state.nextAdmin ? copy.users.list.makeAdmin : copy.users.list.removeAdmin,
+      destructive: !state.nextAdmin,
+    };
+  }
+
+  return {
+    title: copy.users.list.deactivateTitle(state.user.displayName),
+    description: copy.users.list.deactivateDescription,
+    confirmLabel: state.user.isActive ? copy.users.list.deactivate : copy.users.list.reactivate,
+    destructive: state.user.isActive,
+  };
 }
 
 export function UserList({ users, currentUserId }: UserListProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [confirmTarget, setConfirmTarget] = useState<UserItem | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [passwordTarget, setPasswordTarget] = useState<UserItem | null>(null);
+  const [editTarget, setEditTarget] = useState<UserItem | null>(null);
+
+  const refreshAfter = (message: string) => {
+    toast.success(message);
+    setConfirmState(null);
+    router.refresh();
+  };
 
   const handleToggle = (user: UserItem) => {
     startTransition(async () => {
-      const res = await toggleUserActive(user.id);
-      if (res && 'error' in res) {
-        toast.error(res.error);
-      } else {
-        toast.success(
-          user.isActive
-            ? `${user.displayName} foi desativado.`
-            : `${user.displayName} foi reativado.`,
-        );
-        router.refresh();
+      const result = await toggleUserActive(user.id);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
       }
-      setConfirmTarget(null);
+
+      refreshAfter(
+        user.isActive
+          ? copy.users.list.deactivated(user.displayName)
+          : copy.users.list.reactivated(user.displayName),
+      );
     });
   };
+
+  const handleDelete = (user: UserItem) => {
+    startTransition(async () => {
+      const result = await deleteUser(user.id);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      refreshAfter(copy.users.list.deleted(user.displayName));
+    });
+  };
+
+  const handleRole = (user: UserItem, nextAdmin: boolean) => {
+    startTransition(async () => {
+      const result = await setUserAdmin(user.id, nextAdmin);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      refreshAfter(
+        nextAdmin
+          ? copy.users.list.adminGranted(user.displayName)
+          : copy.users.list.adminRevoked(user.displayName),
+      );
+    });
+  };
+
+  const handleConfirm = () => {
+    if (!confirmState) return;
+    if (confirmState.type === 'delete') handleDelete(confirmState.user);
+    if (confirmState.type === 'toggle') handleToggle(confirmState.user);
+    if (confirmState.type === 'role') handleRole(confirmState.user, confirmState.nextAdmin);
+  };
+
+  const confirmContent = getConfirmContent(confirmState);
 
   return (
     <>
@@ -93,19 +164,17 @@ export function UserList({ users, currentUserId }: UserListProps) {
                   {user.isAdmin && (
                     <Badge variant="default" className="gap-1">
                       <ShieldCheck className="size-3" />
-                      Admin
+                      {copy.users.roles.adminShort}
                     </Badge>
                   )}
-                  {!user.isActive && (
-                    <Badge variant="outline">Inativo</Badge>
-                  )}
-                  {isSelf && (
-                    <Badge variant="secondary">Você</Badge>
-                  )}
+                  {!user.isActive && <Badge variant="outline">{copy.users.status.inactive}</Badge>}
+                  {isSelf && <Badge variant="secondary">{copy.users.status.you}</Badge>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  @{user.username} · ingressou em{' '}
-                  {format(new Date(user.createdAt), "MMM 'de' yyyy", { locale: ptBR })}
+                  {copy.users.status.joinedAt(
+                    user.username,
+                    formatPtBrDate(user.createdAt, DATE_FORMATS.monthYear),
+                  )}
                 </p>
               </div>
 
@@ -114,34 +183,58 @@ export function UserList({ users, currentUserId }: UserListProps) {
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Ações para ${user.displayName}`}
+                    aria-label={copy.users.list.actionsFor(user.displayName)}
                     disabled={isPending}
                   >
                     <MoreVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onSelect={() => setEditTarget(user)}>
+                    <Pencil className="size-4" />
+                    {copy.users.list.edit}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setPasswordTarget(user)}>
                     <KeyRound className="size-4" />
-                    Redefinir senha
+                    {copy.users.list.resetPassword}
                   </DropdownMenuItem>
                   {!isSelf && (
                     <>
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          setConfirmState({ type: 'role', user, nextAdmin: !user.isAdmin })
+                        }
+                      >
+                        {user.isAdmin ? (
+                          <UserCog className="size-4" />
+                        ) : (
+                          <ShieldCheck className="size-4" />
+                        )}
+                        {user.isAdmin ? copy.users.list.removeAdmin : copy.users.list.makeAdmin}
+                      </DropdownMenuItem>
                       {user.isActive ? (
                         <DropdownMenuItem
-                          onSelect={() => setConfirmTarget(user)}
+                          onSelect={() => setConfirmState({ type: 'toggle', user })}
                           className="text-destructive focus:text-destructive focus:bg-destructive/10"
                         >
                           <ShieldOff className="size-4" />
-                          Desativar acesso
+                          {copy.users.list.deactivate}
                         </DropdownMenuItem>
                       ) : (
-                        <DropdownMenuItem onSelect={() => handleToggle(user)}>
+                        <DropdownMenuItem onSelect={() => setConfirmState({ type: 'toggle', user })}>
                           <Shield className="size-4" />
-                          Reativar acesso
+                          {copy.users.list.reactivate}
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setConfirmState({ type: 'delete', user })}
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                      >
+                        <Trash2 className="size-4" />
+                        {copy.users.list.delete}
+                      </DropdownMenuItem>
                     </>
                   )}
                 </DropdownMenuContent>
@@ -152,24 +245,31 @@ export function UserList({ users, currentUserId }: UserListProps) {
       </div>
 
       <ConfirmDialog
-        open={!!confirmTarget}
-        onOpenChange={(o) => !o && setConfirmTarget(null)}
-        title={`Desativar ${confirmTarget?.displayName ?? 'usuário'}?`}
-        description="O usuário não poderá mais entrar no sistema, mas todo o histórico será preservado. Você pode reativá-lo a qualquer momento."
-        confirmLabel="Desativar"
-        variant="destructive"
-        onConfirm={() => {
-          if (confirmTarget) handleToggle(confirmTarget);
-        }}
+        open={!!confirmState}
+        onOpenChange={(open) => !open && setConfirmState(null)}
+        title={confirmContent.title}
+        description={confirmContent.description}
+        confirmLabel={confirmContent.confirmLabel}
+        variant={confirmContent.destructive ? 'destructive' : 'default'}
+        onConfirm={handleConfirm}
       />
 
       {passwordTarget && (
         <ChangePasswordDialog
           open={!!passwordTarget}
-          onOpenChange={(o) => !o && setPasswordTarget(null)}
+          onOpenChange={(open) => !open && setPasswordTarget(null)}
           targetUserId={passwordTarget.id}
           targetUserName={passwordTarget.displayName}
           isSelf={passwordTarget.id === currentUserId}
+        />
+      )}
+
+      {editTarget && (
+        <EditUserDialog
+          open={!!editTarget}
+          onOpenChange={(open) => !open && setEditTarget(null)}
+          user={editTarget}
+          isSelf={editTarget.id === currentUserId}
         />
       )}
     </>

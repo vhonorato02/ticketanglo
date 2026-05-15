@@ -1,16 +1,16 @@
-import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { ArrowLeft, Calendar, MapPin, User, Tag, FileText } from 'lucide-react';
-import { getTicket } from '@/actions/tickets';
-import { getComments } from '@/actions/comments';
-import { getTicketHistory, getUsers } from '@/actions/users';
+import { notFound } from 'next/navigation';
+import { ArrowLeft, Calendar, FileText, MapPin, Tag, User } from 'lucide-react';
 import { auth } from '@/auth';
-import { StatusBadge, PriorityBadge, AreaBadge } from '@/components/tickets/ticket-badge';
-import { TicketActions } from './actions';
+import { getComments } from '@/actions/comments';
+import { getTicket } from '@/actions/tickets';
+import { getTicketHistory, getUsers } from '@/actions/users';
+import { AreaBadge, PriorityBadge, StatusBadge } from '@/components/tickets/ticket-badge';
+import { copy } from '@/lib/copy';
+import { DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 import { CommentThread } from './comment-thread';
 import { HistoryLog } from './history-log';
+import { TicketActions } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,20 +37,19 @@ export default async function TicketDetailPage({ params }: PageProps) {
 
   if (!ticket) notFound();
 
-  const activeUsers = users.filter((u) => u.isActive);
+  const activeUsers = users.filter((user) => user.isActive);
+  const authorName = ticket.author?.displayName ?? copy.common.removedUser;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Voltar */}
       <Link
         href="/tickets"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="size-4" />
-        Todas as demandas
+        {copy.tickets.detail.back}
       </Link>
 
-      {/* Cabeçalho */}
       <header className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm text-muted-foreground font-medium">{ticket.code}</span>
@@ -77,12 +76,12 @@ export default async function TicketDetailPage({ params }: PageProps) {
           )}
           <span className="flex items-center gap-1.5">
             <User className="size-3.5" />
-            {ticket.author?.displayName ?? 'Desconhecido'}
+            {authorName}
           </span>
           <span className="flex items-center gap-1.5">
             <Calendar className="size-3.5" />
             <time dateTime={new Date(ticket.createdAt).toISOString()}>
-              {format(new Date(ticket.createdAt), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+              {formatPtBrDate(ticket.createdAt, DATE_FORMATS.ticketDetail)}
             </time>
           </span>
         </div>
@@ -90,41 +89,30 @@ export default async function TicketDetailPage({ params }: PageProps) {
 
       <div className="h-px bg-border" />
 
-      {/* Conteúdo principal */}
       <div className="grid lg:grid-cols-[1fr_280px] gap-8">
         <div className="space-y-8 min-w-0">
-          {/* Descrição */}
           {ticket.description ? (
             <section>
               <h2 className="text-xs font-semibold mb-2.5 text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <FileText className="size-3.5" />
-                Descrição
+                {copy.tickets.detail.description}
               </h2>
               <div className="text-sm leading-relaxed whitespace-pre-wrap rounded-xl bg-muted/30 border border-border/60 p-4">
                 {ticket.description}
               </div>
             </section>
           ) : (
-            <p className="text-sm text-muted-foreground italic">Sem descrição detalhada.</p>
+            <p className="text-sm text-muted-foreground italic">
+              {copy.tickets.detail.noDescription}
+            </p>
           )}
 
-          {/* Comentários */}
-          <CommentThread
-            ticketCode={code}
-            comments={comments}
-            currentUserId={currentUserId}
-          />
+          <CommentThread ticketCode={code} comments={comments} currentUserId={currentUserId} />
 
-          {/* Histórico */}
           {history.length > 0 && <HistoryLog history={history} />}
         </div>
 
-        {/* Ações (sidebar) */}
-        <TicketActions
-          ticket={ticket}
-          users={activeUsers}
-          currentUserId={currentUserId}
-        />
+        <TicketActions ticket={ticket} users={activeUsers} currentUserId={currentUserId} />
       </div>
     </div>
   );

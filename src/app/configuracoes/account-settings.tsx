@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ChangePasswordDialog } from '@/components/change-password-dialog';
+import { copy } from '@/lib/copy';
+import { initials } from '@/lib/format';
 
 interface AccountSettingsProps {
   userId: string;
@@ -13,20 +15,9 @@ interface AccountSettingsProps {
   isAdmin: boolean;
 }
 
-function initials(name: string) {
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '?'
-  );
-}
-
 export function AccountSettings({ userId, displayName, isAdmin }: AccountSettingsProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const name = displayName || copy.dashboard.greeting.fallbackName;
 
   return (
     <>
@@ -34,21 +25,21 @@ export function AccountSettings({ userId, displayName, isAdmin }: AccountSetting
         <div className="flex items-center gap-4">
           <Avatar className="size-12">
             <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-              {initials(displayName)}
+              {initials(name)}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold">{displayName || 'Usuário'}</p>
+            <p className="font-semibold">{name}</p>
             <div className="flex items-center gap-1.5 mt-1">
               {isAdmin ? (
                 <Badge variant="default" className="gap-1">
                   <ShieldCheck className="size-3" />
-                  Administrador
+                  {copy.users.roles.admin}
                 </Badge>
               ) : (
                 <Badge variant="secondary" className="gap-1">
                   <UserIcon className="size-3" />
-                  Usuário
+                  {copy.users.roles.user}
                 </Badge>
               )}
             </div>
@@ -63,14 +54,14 @@ export function AccountSettings({ userId, displayName, isAdmin }: AccountSetting
               <KeyRound className="size-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-medium">Senha</h3>
+              <h3 className="font-medium">{copy.users.account.passwordTitle}</h3>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Atualize sua senha periodicamente para manter a conta segura.
+                {copy.users.account.passwordDescription}
               </p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-            Alterar senha
+            {copy.users.account.changePassword}
           </Button>
         </div>
       </div>
@@ -79,7 +70,7 @@ export function AccountSettings({ userId, displayName, isAdmin }: AccountSetting
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         targetUserId={userId}
-        targetUserName={displayName}
+        targetUserName={name}
         isSelf
       />
     </>

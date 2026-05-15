@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { copy } from '@/lib/copy';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -28,8 +29,8 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Confirmar',
-  cancelLabel = 'Cancelar',
+  confirmLabel = copy.common.confirm,
+  cancelLabel = copy.common.cancel,
   variant = 'default',
   onConfirm,
 }: ConfirmDialogProps) {

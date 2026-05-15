@@ -4,6 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { KanbanCard } from './kanban-card';
 import { STATUS_LABELS } from '@/lib/constants';
+import { copy } from '@/lib/copy';
 import type { Ticket } from '@/db/schema';
 
 type Status = Ticket['status'];
@@ -64,7 +65,7 @@ export function KanbanColumn({ status, tickets }: KanbanColumnProps) {
       >
         {tickets.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground/60 py-8 px-3 text-center">
-            {isOver ? 'Soltar aqui' : 'Vazio'}
+            {isOver ? copy.common.dropHere : copy.common.empty}
           </div>
         ) : (
           tickets.map((t) => <KanbanCard key={t.code} ticket={t} />)

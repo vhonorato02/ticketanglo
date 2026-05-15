@@ -42,9 +42,7 @@ export const tickets = pgTable(
     priority: priorityEnum('priority').default('media').notNull(),
     status: statusEnum('status').default('aberto').notNull(),
     assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
-    authorId: uuid('author_id')
-      .references(() => users.id)
-      .notNull(),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     resolvedAt: timestamp('resolved_at'),
@@ -63,9 +61,7 @@ export const comments = pgTable('comments', {
   ticketId: uuid('ticket_id')
     .references(() => tickets.id, { onDelete: 'cascade' })
     .notNull(),
-  authorId: uuid('author_id')
-    .references(() => users.id)
-    .notNull(),
+  authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
   body: text('body').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -75,9 +71,7 @@ export const ticketHistory = pgTable('ticket_history', {
   ticketId: uuid('ticket_id')
     .references(() => tickets.id, { onDelete: 'cascade' })
     .notNull(),
-  authorId: uuid('author_id')
-    .references(() => users.id)
-    .notNull(),
+  authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
   field: text('field').notNull(),
   oldValue: text('old_value'),
   newValue: text('new_value'),
