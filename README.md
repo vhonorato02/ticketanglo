@@ -65,14 +65,12 @@ npm run db:push
 npm run db:seed
 ```
 
-Cria os usuários padrão:
+Cria o usuário padrão:
 | Usuário | Senha | Admin |
 |---------|-------|-------|
-| natalia | anglo2025 | Sim |
-| ti | anglo2025 | Não |
-| marketing | anglo2025 | Não |
+| anglo | tiango26## | Sim |
 
-**Altere as senhas após o primeiro login** via `/configuracoes`.
+**Crie os demais usuários após o primeiro login** via `/configuracoes`.
 
 ### 6. Rode localmente
 

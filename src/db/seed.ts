@@ -4,9 +4,7 @@ import { users } from './schema';
 import bcrypt from 'bcryptjs';
 
 const SEED_USERS = [
-  { username: 'natalia', displayName: 'Natália', password: 'anglo2025', isAdmin: true },
-  { username: 'ti', displayName: 'Equipe TI', password: 'anglo2025', isAdmin: false },
-  { username: 'marketing', displayName: 'Equipe Marketing', password: 'anglo2025', isAdmin: false },
+  { username: 'anglo', displayName: 'Anglo Pinda', password: 'tiango26##', isAdmin: true },
 ];
 
 async function seed() {
