@@ -172,6 +172,12 @@ export const copy = {
       emptyDefaultHint: 'Pressione N para registrar a primeira.',
       byAuthor: (name: string) => `por ${name}`,
       fileNamePrefix: 'tickets',
+      pagination: {
+        previous: 'Anterior',
+        next: 'Próxima',
+        page: (page: number, total: number) => `Página ${page} de ${total}`,
+        range: (start: number, end: number, total: number) => `${start}-${end} de ${total}`,
+      },
     },
     form: {
       title: 'Nova demanda',
@@ -233,6 +239,13 @@ export const copy = {
       assigneeRemoved: 'Responsável removido.',
       assigneeUpdated: (name: string) => `Atribuído a ${name}.`,
       priorityUpdated: 'Prioridade atualizada.',
+      editDetails: 'Editar detalhes',
+      detailsUpdated: 'Detalhes atualizados.',
+      deleteTicket: 'Excluir demanda',
+      deleteTicketTitle: (code: string) => `Excluir ${code}?`,
+      deleteTicketDescription:
+        'A demanda, os comentários e o histórico serão removidos definitivamente. Use apenas para registros criados por engano.',
+      ticketDeleted: (code: string) => `${code} foi excluída.`,
       statusActions: {
         aberto: 'Reabrir',
         em_andamento: 'Iniciar atendimento',
@@ -248,6 +261,15 @@ export const copy = {
       placeholder: 'Atualização, dúvida ou observação...',
       shortcut: 'Ctrl + Enter para enviar',
       submit: 'Comentar',
+      actionsFor: (name: string) => `Ações do comentário de ${name}`,
+      edit: 'Editar comentário',
+      delete: 'Excluir comentário',
+      saveEdit: 'Salvar edição',
+      editPlaceholder: 'Atualize o comentário...',
+      edited: 'Comentário atualizado.',
+      deleted: 'Comentário excluído.',
+      deleteTitle: 'Excluir comentário?',
+      deleteDescription: 'Esta ação remove o comentário definitivamente.',
     },
     history: {
       title: 'Histórico de alterações',

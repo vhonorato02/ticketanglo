@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { db } from '@/db';
 import { comments, tickets, users } from '@/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { and, eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
 import { copy } from '@/lib/copy';
 
@@ -16,7 +16,7 @@ async function requireAuth() {
 }
 
 const commentSchema = z.object({
-  body: z.string().min(1).max(4000),
+  body: z.string().trim().min(1).max(4000),
 });
 
 export async function addComment(ticketCode: string, formData: FormData) {
@@ -39,6 +39,63 @@ export async function addComment(ticketCode: string, formData: FormData) {
     body: parsed.data.body,
   });
 
+  await db.update(tickets).set({ updatedAt: new Date() }).where(eq(tickets.code, ticketCode));
+
+  revalidatePath(`/tickets/${ticketCode}`);
+  return { ok: true };
+}
+
+async function getCommentWithTicket(commentId: string, ticketCode: string) {
+  const [record] = await db
+    .select({
+      id: comments.id,
+      authorId: comments.authorId,
+      ticketId: comments.ticketId,
+      ticketCode: tickets.code,
+    })
+    .from(comments)
+    .innerJoin(tickets, eq(comments.ticketId, tickets.id))
+    .where(and(eq(comments.id, commentId), eq(tickets.code, ticketCode)))
+    .limit(1);
+
+  return record ?? null;
+}
+
+function canManageComment(
+  user: { id: string; isAdmin?: boolean },
+  comment: { authorId: string | null },
+) {
+  return user.isAdmin || comment.authorId === user.id;
+}
+
+export async function updateComment(ticketCode: string, commentId: string, formData: FormData) {
+  const user = await requireAuth();
+  const parsedId = z.string().uuid().safeParse(commentId);
+  const parsedBody = commentSchema.safeParse({ body: formData.get('body') });
+
+  if (!parsedId.success || !parsedBody.success) return { error: copy.validation.invalidComment };
+
+  const comment = await getCommentWithTicket(parsedId.data, ticketCode);
+  if (!comment) return { error: copy.validation.invalidComment };
+  if (!canManageComment(user, comment)) return { error: copy.auth.errors.permissionDenied };
+
+  await db.update(comments).set({ body: parsedBody.data.body }).where(eq(comments.id, parsedId.data));
+  await db.update(tickets).set({ updatedAt: new Date() }).where(eq(tickets.code, ticketCode));
+
+  revalidatePath(`/tickets/${ticketCode}`);
+  return { ok: true };
+}
+
+export async function deleteComment(ticketCode: string, commentId: string) {
+  const user = await requireAuth();
+  const parsedId = z.string().uuid().safeParse(commentId);
+  if (!parsedId.success) return { error: copy.validation.invalidComment };
+
+  const comment = await getCommentWithTicket(parsedId.data, ticketCode);
+  if (!comment) return { error: copy.validation.invalidComment };
+  if (!canManageComment(user, comment)) return { error: copy.auth.errors.permissionDenied };
+
+  await db.delete(comments).where(eq(comments.id, parsedId.data));
   await db.update(tickets).set({ updatedAt: new Date() }).where(eq(tickets.code, ticketCode));
 
   revalidatePath(`/tickets/${ticketCode}`);

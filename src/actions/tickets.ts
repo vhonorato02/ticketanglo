@@ -20,6 +20,12 @@ async function requireAuth() {
   return session.user;
 }
 
+async function requireAdmin() {
+  const user = await requireAuth();
+  if (!user.isAdmin) return null;
+  return user;
+}
+
 async function generateCode(area: Area): Promise<string> {
   const result = await db
     .select({ code: tickets.code })
@@ -64,13 +70,16 @@ async function resolveUserName(userId: string | null): Promise<string | null> {
   return user?.displayName ?? copy.common.removedUser;
 }
 
-const createSchema = z.object({
+const ticketDetailsSchema = z.object({
   area: areaSchema,
   title: z.string().trim().min(1).max(80),
   subcategory: z.string().trim().min(1).max(80),
   priority: prioritySchema.default('media'),
   description: z.string().trim().max(4000).optional(),
   origin: z.string().trim().max(120).optional(),
+});
+
+const createSchema = ticketDetailsSchema.extend({
   assigneeId: z.string().uuid().optional().or(z.literal('')),
 });
 
@@ -255,20 +264,94 @@ export async function updateTicketField(code: string, field: string, value: stri
   return { ok: true };
 }
 
-export type TicketRow = Awaited<ReturnType<typeof getTickets>>[number];
+export async function updateTicketDetails(code: string, formData: FormData) {
+  const user = await requireAuth();
 
-export async function getTickets(filters?: {
+  const parsed = ticketDetailsSchema.safeParse({
+    area: formData.get('area'),
+    title: formData.get('title'),
+    subcategory: formData.get('subcategory'),
+    priority: formData.get('priority'),
+    description: formData.get('description') || undefined,
+    origin: formData.get('origin') || undefined,
+  });
+
+  if (!parsed.success) return { error: copy.validation.invalidData };
+
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.code, code)).limit(1);
+  if (!ticket) return { error: copy.validation.invalidTicket };
+  if (parsed.data.area !== ticket.area || !isValidSubcategory(ticket.area, parsed.data.subcategory)) {
+    return { error: copy.validation.invalidSubcategory };
+  }
+
+  const next = {
+    title: parsed.data.title,
+    subcategory: parsed.data.subcategory,
+    priority: parsed.data.priority,
+    description: normalizeOptionalText(parsed.data.description),
+    origin: normalizeOptionalText(parsed.data.origin),
+  };
+
+  const changes: Array<{
+    field: keyof typeof next;
+    oldValue: string | null;
+    newValue: string | null;
+  }> = [];
+
+  for (const field of Object.keys(next) as Array<keyof typeof next>) {
+    const oldValue = ticket[field] != null ? String(ticket[field]) : null;
+    const newValue = next[field] != null ? String(next[field]) : null;
+    if (oldValue !== newValue) changes.push({ field, oldValue, newValue });
+  }
+
+  if (changes.length === 0) return { ok: true };
+
+  await db
+    .update(tickets)
+    .set({ ...next, updatedAt: new Date() })
+    .where(eq(tickets.code, code));
+
+  await Promise.all(
+    changes.map((change) =>
+      recordHistory(ticket.id, user.id, change.field, change.oldValue, change.newValue),
+    ),
+  );
+
+  revalidatePath('/');
+  revalidatePath(`/tickets/${code}`);
+  revalidatePath('/tickets');
+  revalidatePath('/kanban');
+  return { ok: true };
+}
+
+export async function deleteTicket(code: string) {
+  const user = await requireAdmin();
+  if (!user) return { error: copy.auth.errors.permissionDenied };
+
+  const [ticket] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(eq(tickets.code, code))
+    .limit(1);
+  if (!ticket) return { error: copy.validation.invalidTicket };
+
+  await db.delete(tickets).where(eq(tickets.code, code));
+
+  revalidatePath('/');
+  revalidatePath('/tickets');
+  revalidatePath('/kanban');
+  revalidatePath(`/tickets/${code}`);
+  return { ok: true };
+}
+
+function buildTicketConditions(filters?: {
   area?: string;
   status?: string;
   priority?: string;
   assigneeId?: string;
   search?: string;
-  page?: number;
 }) {
-  const { area, status, priority, assigneeId, search, page = 1 } = filters ?? {};
-  const limit = 50;
-  const offset = (page - 1) * limit;
-
+  const { area, status, priority, assigneeId, search } = filters ?? {};
   const conditions = [];
   if (area && area !== 'all') conditions.push(eq(tickets.area, area as Area));
   if (status && status !== 'all') conditions.push(eq(tickets.status, status as Status));
@@ -290,7 +373,23 @@ export async function getTickets(filters?: {
     );
   }
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export type TicketRow = Awaited<ReturnType<typeof getTickets>>[number];
+
+export async function getTickets(filters?: {
+  area?: string;
+  status?: string;
+  priority?: string;
+  assigneeId?: string;
+  search?: string;
+  page?: number;
+}) {
+  const { page = 1 } = filters ?? {};
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  const where = buildTicketConditions(filters);
 
   return db
     .select({
@@ -316,6 +415,21 @@ export async function getTickets(filters?: {
     .orderBy(desc(tickets.createdAt))
     .limit(limit)
     .offset(offset);
+}
+
+export async function getTicketCount(filters?: {
+  area?: string;
+  status?: string;
+  priority?: string;
+  assigneeId?: string;
+  search?: string;
+}) {
+  const [result] = await db
+    .select({ total: count() })
+    .from(tickets)
+    .where(buildTicketConditions(filters));
+
+  return Number(result?.total ?? 0);
 }
 
 export async function getTicket(code: string) {

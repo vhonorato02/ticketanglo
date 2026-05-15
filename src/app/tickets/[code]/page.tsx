@@ -27,6 +27,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
   const { code } = await params;
   const session = await auth();
   const currentUserId = session?.user?.id ?? '';
+  const currentUserIsAdmin = session?.user?.isAdmin ?? false;
 
   const [ticket, comments, history, users] = await Promise.all([
     getTicket(code),
@@ -107,12 +108,22 @@ export default async function TicketDetailPage({ params }: PageProps) {
             </p>
           )}
 
-          <CommentThread ticketCode={code} comments={comments} currentUserId={currentUserId} />
+          <CommentThread
+            ticketCode={code}
+            comments={comments}
+            currentUserId={currentUserId}
+            currentUserIsAdmin={currentUserIsAdmin}
+          />
 
           {history.length > 0 && <HistoryLog history={history} />}
         </div>
 
-        <TicketActions ticket={ticket} users={activeUsers} currentUserId={currentUserId} />
+        <TicketActions
+          ticket={ticket}
+          users={activeUsers}
+          currentUserId={currentUserId}
+          currentUserIsAdmin={currentUserIsAdmin}
+        />
       </div>
     </div>
   );

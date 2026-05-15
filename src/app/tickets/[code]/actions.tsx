@@ -8,9 +8,11 @@ import {
   CheckCircle2,
   Loader2,
   PauseCircle,
+  Pencil,
   PlayCircle,
   RotateCcw,
   Settings2,
+  Trash2,
   UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,11 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { updateTicketField, updateTicketStatus } from '@/actions/tickets';
+import { deleteTicket, updateTicketField, updateTicketStatus } from '@/actions/tickets';
 import { cn } from '@/lib/utils';
 import { copy } from '@/lib/copy';
 import { PRIORITY_LABELS, PRIORITY_ORDER, STATUS_TRANSITIONS } from '@/lib/constants';
 import type { Ticket, User } from '@/db/schema';
+import { EditTicketDialog } from './edit-ticket-dialog';
 
 interface TicketActionsProps {
   ticket: Ticket & {
@@ -35,6 +38,7 @@ interface TicketActionsProps {
   };
   users: Pick<User, 'id' | 'displayName' | 'isActive'>[];
   currentUserId: string;
+  currentUserIsAdmin: boolean;
 }
 
 interface ActionMeta {
@@ -76,11 +80,18 @@ const STATUS_ACTIONS: Record<Ticket['status'], ActionMeta> = {
   },
 };
 
-export function TicketActions({ ticket, users, currentUserId }: TicketActionsProps) {
+export function TicketActions({
+  ticket,
+  users,
+  currentUserId,
+  currentUserIsAdmin,
+}: TicketActionsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [pendingStatus, setPendingStatus] = useState<Ticket['status'] | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<Ticket['status'] | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const performStatusChange = (newStatus: Ticket['status']) => {
     setPendingStatus(newStatus);
@@ -141,6 +152,20 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
     });
   };
 
+  const handleDeleteTicket = () => {
+    startTransition(async () => {
+      const result = await deleteTicket(ticket.code);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(copy.tickets.detail.ticketDeleted(ticket.code));
+      router.push('/tickets');
+      router.refresh();
+    });
+  };
+
   const nextStatuses = STATUS_TRANSITIONS[ticket.status] as readonly Ticket['status'][];
   const confirmMeta = confirmStatus ? STATUS_ACTIONS[confirmStatus] : null;
 
@@ -152,6 +177,17 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
             <Settings2 className="size-3.5" />
             {copy.tickets.detail.actionsTitle}
           </h3>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-xs h-8"
+            disabled={isPending}
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="size-3.5" />
+            {copy.tickets.detail.editDetails}
+          </Button>
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">
@@ -243,6 +279,22 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
               </SelectContent>
             </Select>
           </div>
+
+          {currentUserIsAdmin && (
+            <>
+              <div className="h-px bg-border" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={isPending}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="size-3.5" />
+                {copy.tickets.detail.deleteTicket}
+              </Button>
+            </>
+          )}
         </div>
 
         <div className="rounded-xl border bg-card p-4 space-y-2.5 text-xs">
@@ -283,6 +335,18 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
           if (confirmStatus) performStatusChange(confirmStatus);
         }}
       />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={copy.tickets.detail.deleteTicketTitle(ticket.code)}
+        description={copy.tickets.detail.deleteTicketDescription}
+        confirmLabel={copy.tickets.detail.deleteTicket}
+        variant="destructive"
+        onConfirm={handleDeleteTicket}
+      />
+
+      <EditTicketDialog open={editOpen} onOpenChange={setEditOpen} ticket={ticket} />
     </>
   );
 }

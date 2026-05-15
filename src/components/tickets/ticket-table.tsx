@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Download, FilterX, Inbox, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FilterX, Inbox, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AreaBadge, PriorityBadge, StatusBadge } from './ticket-badge';
@@ -27,6 +27,9 @@ import { DATE_FORMATS, formatPtBrDate } from '@/lib/format';
 interface Props {
   tickets: TicketRow[];
   users: { id: string; displayName: string }[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 function escapeCsv(value: string) {
@@ -69,7 +72,7 @@ function exportCSV(tickets: TicketRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export function TicketTable({ tickets, users }: Props) {
+export function TicketTable({ tickets, users, total, page, pageSize }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -127,6 +130,20 @@ export function TicketTable({ tickets, users }: Props) {
     !!search;
 
   const clearFilters = () => router.push(pathname);
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd = Math.min(page * pageSize, total);
+
+  const goToPage = (nextPage: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextPage > 1) {
+      params.set('page', String(nextPage));
+    } else {
+      params.delete('page');
+    }
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
 
   return (
     <div className="space-y-4">
@@ -222,7 +239,7 @@ export function TicketTable({ tickets, users }: Props) {
 
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
-            {copy.tickets.table.count(tickets.length)}
+            {copy.tickets.table.count(total)}
           </span>
           <Button
             variant="outline"
@@ -322,6 +339,39 @@ export function TicketTable({ tickets, users }: Props) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {copy.tickets.table.pagination.range(pageStart, pageEnd, total)}
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page - 1)}
+              disabled={page <= 1}
+              className="gap-1.5"
+            >
+              <ChevronLeft className="size-3.5" />
+              {copy.tickets.table.pagination.previous}
+            </Button>
+            <span className="text-xs text-muted-foreground tabular-nums min-w-24 text-center">
+              {copy.tickets.table.pagination.page(page, totalPages)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= totalPages}
+              className="gap-1.5"
+            >
+              {copy.tickets.table.pagination.next}
+              <ChevronRight className="size-3.5" />
+            </Button>
           </div>
         </div>
       )}

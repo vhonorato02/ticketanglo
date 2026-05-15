@@ -1,15 +1,22 @@
 'use client';
 
-import { useRef, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, MessageSquare, SendHorizontal } from 'lucide-react';
+import { Loader2, MessageSquare, MoreVertical, Pencil, SendHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { addComment } from '@/actions/comments';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { addComment, deleteComment, updateComment } from '@/actions/comments';
 import { copy } from '@/lib/copy';
 import { initials } from '@/lib/format';
 
@@ -25,11 +32,20 @@ interface CommentThreadProps {
   ticketCode: string;
   comments: Comment[];
   currentUserId: string;
+  currentUserIsAdmin: boolean;
 }
 
-export function CommentThread({ ticketCode, comments }: CommentThreadProps) {
+export function CommentThread({
+  ticketCode,
+  comments,
+  currentUserId,
+  currentUserIsAdmin,
+}: CommentThreadProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Comment | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -50,17 +66,68 @@ export function CommentThread({ ticketCode, comments }: CommentThreadProps) {
     });
   };
 
+  const startEdit = (comment: Comment) => {
+    setEditingId(comment.id);
+    setEditingBody(comment.body);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingBody('');
+  };
+
+  const saveEdit = (commentId: string) => {
+    const body = editingBody.trim();
+    if (!body) return;
+
+    const formData = new FormData();
+    formData.set('body', body);
+
+    startTransition(async () => {
+      const result = await updateComment(ticketCode, commentId, formData);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(copy.tickets.comments.edited);
+      cancelEdit();
+      router.refresh();
+    });
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+
+    startTransition(async () => {
+      const result = await deleteComment(ticketCode, deleteTarget.id);
+      if (result && 'error' in result) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(copy.tickets.comments.deleted);
+      setDeleteTarget(null);
+      router.refresh();
+    });
+  };
+
   return (
     <section className="space-y-4">
       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
         <MessageSquare className="size-3.5" />
-        {comments.length === 0 ? copy.tickets.comments.title : copy.tickets.comments.count(comments.length)}
+        {comments.length === 0
+          ? copy.tickets.comments.title
+          : copy.tickets.comments.count(comments.length)}
       </h2>
 
       {comments.length > 0 && (
         <div className="space-y-4">
           {comments.map((comment) => {
             const authorName = comment.authorName ?? copy.tickets.comments.anonymous;
+            const canManage = currentUserIsAdmin || comment.authorId === currentUserId;
+            const isEditing = editingId === comment.id;
+
             return (
               <article key={comment.id} className="flex gap-3">
                 <Avatar className="size-8 shrink-0">
@@ -69,21 +136,84 @@ export function CommentThread({ ticketCode, comments }: CommentThreadProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                    <span className="text-sm font-medium">{authorName}</span>
-                    <time
-                      dateTime={new Date(comment.createdAt).toISOString()}
-                      className="text-xs text-muted-foreground"
-                    >
-                      {formatDistanceToNow(new Date(comment.createdAt), {
-                        addSuffix: true,
-                        locale: ptBR,
-                      })}
-                    </time>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-baseline gap-2 flex-wrap min-w-0 flex-1">
+                      <span className="text-sm font-medium">{authorName}</span>
+                      <time
+                        dateTime={new Date(comment.createdAt).toISOString()}
+                        className="text-xs text-muted-foreground"
+                      >
+                        {formatDistanceToNow(new Date(comment.createdAt), {
+                          addSuffix: true,
+                          locale: ptBR,
+                        })}
+                      </time>
+                    </div>
+
+                    {canManage && !isEditing && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={copy.tickets.comments.actionsFor(authorName)}
+                            disabled={isPending}
+                          >
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => startEdit(comment)}>
+                            <Pencil className="size-4" />
+                            {copy.tickets.comments.edit}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setDeleteTarget(comment)}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 className="size-4" />
+                            {copy.tickets.comments.delete}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap rounded-lg bg-muted/40 border border-border/60 px-3.5 py-2.5">
-                    {comment.body}
-                  </div>
+
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editingBody}
+                        onChange={(event) => setEditingBody(event.target.value)}
+                        placeholder={copy.tickets.comments.editPlaceholder}
+                        className="min-h-[96px]"
+                        disabled={isPending}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={cancelEdit}
+                          disabled={isPending}
+                        >
+                          {copy.common.cancel}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => saveEdit(comment.id)}
+                          disabled={isPending || !editingBody.trim()}
+                        >
+                          {isPending && <Loader2 className="animate-spin" />}
+                          {copy.tickets.comments.saveEdit}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap rounded-lg bg-muted/40 border border-border/60 px-3.5 py-2.5">
+                      {comment.body}
+                    </div>
+                  )}
                 </div>
               </article>
             );
@@ -117,6 +247,16 @@ export function CommentThread({ ticketCode, comments }: CommentThreadProps) {
           </Button>
         </div>
       </form>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={copy.tickets.comments.deleteTitle}
+        description={copy.tickets.comments.deleteDescription}
+        confirmLabel={copy.tickets.comments.delete}
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </section>
   );
 }

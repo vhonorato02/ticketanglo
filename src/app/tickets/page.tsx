@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { getTickets } from '@/actions/tickets';
+import { getTicketCount, getTickets } from '@/actions/tickets';
 import { getUsers } from '@/actions/users';
 import { TicketTable } from '@/components/tickets/ticket-table';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,19 +21,34 @@ interface PageProps {
 }
 
 async function TicketList({ searchParams }: { searchParams: Awaited<PageProps['searchParams']> }) {
-  const [tickets, users] = await Promise.all([
-    getTickets({
-      area: searchParams.area,
-      status: searchParams.status,
-      priority: searchParams.priority,
-      assigneeId: searchParams.assigneeId,
-      search: searchParams.search,
-      page: searchParams.page ? Number.parseInt(searchParams.page, 10) : 1,
-    }),
+  const page = Math.max(searchParams.page ? Number.parseInt(searchParams.page, 10) : 1, 1);
+  const filters = {
+    area: searchParams.area,
+    status: searchParams.status,
+    priority: searchParams.priority,
+    assigneeId: searchParams.assigneeId,
+    search: searchParams.search,
+  };
+
+  const [total, users] = await Promise.all([
+    getTicketCount(filters),
     getUsers(),
   ]);
+  const safePage = Math.min(page, Math.max(Math.ceil(total / 50), 1));
+  const tickets = await getTickets({
+    ...filters,
+    page: safePage,
+  });
 
-  return <TicketTable tickets={tickets} users={users.filter((user) => user.isActive)} />;
+  return (
+    <TicketTable
+      tickets={tickets}
+      users={users.filter((user) => user.isActive)}
+      total={total}
+      page={safePage}
+      pageSize={50}
+    />
+  );
 }
 
 export default async function TicketsPage({ searchParams }: PageProps) {

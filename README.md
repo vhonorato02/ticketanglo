@@ -20,6 +20,8 @@ Sistema interno de gestão de demandas para TI e Marketing do Colégio Anglo Pin
 - Server Actions com validação por Zod antes de gravar no banco.
 - Administração com criação, edição, permissão, desativação, redefinição de senha e exclusão segura de usuários.
 - Exclusão de usuário preserva demandas, comentários e histórico como registros de usuário removido.
+- Demandas com edição completa de detalhes, paginação, exportação CSV, Kanban, histórico e exclusão administrativa para registros criados por engano.
+- Comentários com edição e exclusão por autor ou administrador.
 
 ## Ambiente
 
