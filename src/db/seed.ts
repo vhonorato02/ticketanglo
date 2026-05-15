@@ -3,11 +3,11 @@ import { users } from './schema';
 import bcrypt from 'bcryptjs';
 
 const SEED_USERS = [
-  { username: 'anglo', displayName: 'Anglo Pinda', password: 'tiango26##', isAdmin: true },
+  { username: 'anglo', displayName: 'Anglo Pindamonhangaba', password: 'tianglo26##', isAdmin: true },
 ];
 
 async function seed() {
-  console.log('🌱 Iniciando seed...');
+  console.log('Iniciando seed...');
 
   for (const u of SEED_USERS) {
     const passwordHash = await bcrypt.hash(u.password, 12);
@@ -19,11 +19,14 @@ async function seed() {
         passwordHash,
         isAdmin: u.isAdmin,
       })
-      .onConflictDoNothing();
-    console.log(`✓ Usuário criado: ${u.username}`);
+      .onConflictDoUpdate({
+        target: users.username,
+        set: { passwordHash, displayName: u.displayName, isAdmin: u.isAdmin, isActive: true },
+      });
+    console.log(`Usuário sincronizado: ${u.username}`);
   }
 
-  console.log('✅ Seed concluído!');
+  console.log('Seed concluído.');
   process.exit(0);
 }
 

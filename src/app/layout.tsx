@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
@@ -6,11 +6,29 @@ import { Nav } from '@/components/layout/nav';
 import { auth } from '@/auth';
 import { getUsers } from '@/actions/users';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'TicketAnglo — Anglo Pindamonhangaba',
-  description: 'Sistema interno de gestão de demandas — TI e Marketing',
+  title: {
+    default: 'TicketAnglo',
+    template: '%s · TicketAnglo',
+  },
+  description: 'Sistema interno de gestão de demandas — Colégio Anglo Pindamonhangaba',
+  applicationName: 'TicketAnglo',
+  formatDetection: { telephone: false, email: false, address: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a1d22' },
+  ],
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -25,29 +43,28 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         .filter((u) => u.isActive)
         .map((u) => ({ id: u.id, displayName: u.displayName }));
     } catch {
-      // DB not yet connected — graceful fallback
+      // DB indisponível — fallback gracioso
     }
   }
 
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        {/* Inline script to prevent dark-mode flash */}
         <script
           dangerouslySetInnerHTML={{
             __html: `try{const t=localStorage.getItem('theme'),d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(!t&&d))document.documentElement.classList.add('dark');}catch(e){}`,
           }}
         />
       </head>
-      <body className={`${inter.variable} min-h-screen`}>
+      <body className={`${inter.variable} min-h-screen antialiased`}>
         <Providers>
           {isAuthenticated && (
             <Nav
-              user={session.user as { name?: string; isAdmin?: boolean }}
+              user={session!.user as { id?: string; name?: string; isAdmin?: boolean }}
               users={users}
             />
           )}
-          <main className={isAuthenticated ? 'max-w-7xl mx-auto px-4 py-6' : ''}>
+          <main className={isAuthenticated ? 'max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8' : ''}>
             {children}
           </main>
         </Providers>

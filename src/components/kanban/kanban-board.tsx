@@ -13,9 +13,11 @@ import {
   DragStartEvent,
 } from '@dnd-kit/core';
 import { toast } from 'sonner';
+import { Inbox } from 'lucide-react';
 import { KanbanColumn } from './kanban-column';
 import { KanbanCard } from './kanban-card';
 import { updateTicketStatus } from '@/actions/tickets';
+import { STATUS_LABELS } from '@/lib/constants';
 import type { Ticket } from '@/db/schema';
 
 type Status = Ticket['status'];
@@ -48,8 +50,8 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -72,6 +74,8 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
       const result = await updateTicketStatus(code, newStatus);
       if (result && 'error' in result) {
         toast.error(result.error);
+      } else {
+        toast.success(`${ticket.code} movido para "${STATUS_LABELS[newStatus]}".`);
       }
       router.refresh();
     });
@@ -79,11 +83,13 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
 
   if (initialTickets.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+      <div className="rounded-xl border bg-card py-20 text-center">
+        <div className="size-12 rounded-2xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
+          <Inbox className="size-5 text-muted-foreground" />
+        </div>
         <p className="font-medium">Nenhuma demanda no quadro</p>
-        <p className="text-sm mt-1">
-          Pressione <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd> para
-          registrar a primeira.
+        <p className="text-sm text-muted-foreground mt-1.5">
+          Pressione <kbd className="kbd mx-0.5">N</kbd> para registrar a primeira.
         </p>
       </div>
     );
@@ -91,7 +97,7 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-220px)]">
+      <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 sm:-mx-6 px-4 sm:px-6 min-h-[calc(100vh-220px)]">
         {BOARD_STATUSES.map((status) => (
           <KanbanColumn
             key={status}
@@ -101,10 +107,10 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
         ))}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeTicket && (
-          <div className="rotate-1 opacity-95">
-            <KanbanCard ticket={activeTicket} />
+          <div className="rotate-2 cursor-grabbing">
+            <KanbanCard ticket={activeTicket} dragging />
           </div>
         )}
       </DragOverlay>

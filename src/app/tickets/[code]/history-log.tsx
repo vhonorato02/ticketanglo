@@ -41,35 +41,48 @@ interface HistoryEntry {
 
 export function HistoryLog({ history }: { history: HistoryEntry[] }) {
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+    <section className="space-y-3">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
         <History className="size-3.5" />
         Histórico de alterações
       </h2>
 
-      <ol className="space-y-2 border-l border-border pl-4">
+      <ol className="relative space-y-3 border-l border-border/70 pl-5 ml-1.5">
         {history.map((entry) => {
           const fieldLabel = FIELD_LABELS[entry.field] ?? entry.field;
-          const old = humanize(entry.oldValue);
+          const oldVal = humanize(entry.oldValue);
           const next = humanize(entry.newValue);
 
           return (
-            <li key={entry.id} className="relative text-xs text-muted-foreground">
-              <span className="absolute -left-[1.375rem] top-1 size-2 rounded-full bg-border" />
-              <span className="text-muted-foreground/60 tabular-nums mr-2">
-                {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: ptBR })}
-              </span>
-              <span className="font-medium text-foreground">{entry.authorName}</span>
-              {' alterou '}
-              <span className="font-medium">{fieldLabel}</span>
-              {' de '}
-              <span className="font-medium">{old}</span>
-              {' para '}
-              <span className="font-medium">{next}</span>
+            <li key={entry.id} className="relative text-xs">
+              <span className="absolute -left-[1.6875rem] top-1 size-2.5 rounded-full bg-background border-2 border-border" />
+              <div className="text-muted-foreground leading-relaxed">
+                <span className="font-medium text-foreground">
+                  {entry.authorName ?? 'Sistema'}
+                </span>
+                {' alterou '}
+                <span className="font-medium text-foreground">{fieldLabel}</span>
+                {' de '}
+                <span className="font-medium text-foreground">{oldVal}</span>
+                {' para '}
+                <span className="font-medium text-foreground">{next}</span>
+                <span className="text-muted-foreground/70">
+                  {' · '}
+                  <time
+                    dateTime={new Date(entry.createdAt).toISOString()}
+                    className="tabular-nums"
+                  >
+                    {formatDistanceToNow(new Date(entry.createdAt), {
+                      addSuffix: true,
+                      locale: ptBR,
+                    })}
+                  </time>
+                </span>
+              </div>
             </li>
           );
         })}
       </ol>
-    </div>
+    </section>
   );
 }
