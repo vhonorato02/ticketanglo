@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2, UserCheck } from 'lucide-react';
@@ -32,6 +32,15 @@ const STATUS_TRANSITIONS: Record<Ticket['status'], Ticket['status'][]> = {
   arquivado: ['aberto'],
 };
 
+// Verbos de ação em vez de substantivos de estado
+const STATUS_ACTION_LABELS: Record<Ticket['status'], string> = {
+  aberto: 'Reabrir',
+  em_andamento: 'Iniciar atendimento',
+  aguardando: 'Aguardar retorno',
+  resolvido: 'Marcar como resolvido',
+  arquivado: 'Arquivar',
+};
+
 const STATUS_LABELS_PT: Record<Ticket['status'], string> = {
   aberto: 'Aberto',
   em_andamento: 'Em andamento',
@@ -43,10 +52,13 @@ const STATUS_LABELS_PT: Record<Ticket['status'], string> = {
 export function TicketActions({ ticket, users, currentUserId }: TicketActionsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [pendingStatus, setPendingStatus] = useState<Ticket['status'] | null>(null);
 
   const handleStatusChange = (newStatus: Ticket['status']) => {
+    setPendingStatus(newStatus);
     startTransition(async () => {
       const res = await updateTicketStatus(ticket.code, newStatus);
+      setPendingStatus(null);
       if (res && 'error' in res) {
         toast.error(res.error);
       } else {
@@ -58,7 +70,11 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
 
   const handleAssigneeChange = (userId: string) => {
     startTransition(async () => {
-      const res = await updateTicketField(ticket.code, 'assigneeId', userId === 'none' ? null : userId);
+      const res = await updateTicketField(
+        ticket.code,
+        'assigneeId',
+        userId === 'none' ? null : userId,
+      );
       if (res && 'error' in res) {
         toast.error(res.error);
       } else {
@@ -66,10 +82,6 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
         router.refresh();
       }
     });
-  };
-
-  const handleAssignToMe = () => {
-    handleAssigneeChange(currentUserId);
   };
 
   const nextStatuses = STATUS_TRANSITIONS[ticket.status];
@@ -81,23 +93,29 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
           Ações
         </h3>
 
-        {/* Status */}
+        {/* Status transitions */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Mover para</p>
           <div className="flex flex-col gap-1.5">
-            {nextStatuses.map((s) => (
-              <Button
-                key={s}
-                variant="outline"
-                size="sm"
-                className="justify-start text-xs"
-                disabled={isPending}
-                onClick={() => handleStatusChange(s)}
-              >
-                {isPending && <Loader2 className="animate-spin" />}
-                {STATUS_LABELS_PT[s]}
-              </Button>
-            ))}
+            {nextStatuses.map((s) => {
+              const isLoading = pendingStatus === s;
+              const isPrimary = s === 'resolvido';
+              return (
+                <Button
+                  key={s}
+                  variant={isPrimary ? 'default' : 'outline'}
+                  size="sm"
+                  className="justify-start text-xs"
+                  disabled={isPending}
+                  onClick={() => handleStatusChange(s)}
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : null}
+                  {STATUS_ACTION_LABELS[s]}
+                </Button>
+              );
+            })}
           </div>
         </div>
 
@@ -128,7 +146,7 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
               size="sm"
               className="w-full text-xs gap-1.5"
               disabled={isPending}
-              onClick={handleAssignToMe}
+              onClick={() => handleAssigneeChange(currentUserId)}
             >
               <UserCheck className="size-3.5" />
               Atribuir a mim
@@ -163,15 +181,15 @@ export function TicketActions({ ticket, users, currentUserId }: TicketActionsPro
         </div>
       </div>
 
-      {/* Info */}
+      {/* Meta info */}
       <div className="rounded-xl border bg-card p-4 space-y-2 text-xs text-muted-foreground">
         <div className="flex justify-between">
           <span>Criado por</span>
-          <span className="font-medium text-foreground">{ticket.author?.displayName}</span>
+          <span className="font-medium text-foreground">{ticket.author?.displayName ?? '—'}</span>
         </div>
         {ticket.assignee && (
           <div className="flex justify-between">
-            <span>Atribuído a</span>
+            <span>Responsável</span>
             <span className="font-medium text-foreground">{ticket.assignee.displayName}</span>
           </div>
         )}

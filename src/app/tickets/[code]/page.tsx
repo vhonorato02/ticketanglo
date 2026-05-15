@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ArrowLeft, Calendar, MapPin, User, Tag } from 'lucide-react';
 import { getTicket } from '@/actions/tickets';
@@ -37,7 +37,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Back */}
+      {/* Voltar */}
       <Link
         href="/tickets"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -46,7 +46,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
         Todos os tickets
       </Link>
 
-      {/* Header */}
+      {/* Cabeçalho */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm text-muted-foreground font-medium">{ticket.code}</span>
@@ -81,10 +81,10 @@ export default async function TicketDetailPage({ params }: PageProps) {
 
       <Separator />
 
-      {/* Main content */}
+      {/* Conteúdo principal */}
       <div className="grid md:grid-cols-[1fr_260px] gap-6">
         <div className="space-y-6 min-w-0">
-          {/* Description */}
+          {/* Descrição */}
           {ticket.description ? (
             <div>
               <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">
@@ -95,21 +95,21 @@ export default async function TicketDetailPage({ params }: PageProps) {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground italic">Sem descrição.</p>
+            <p className="text-sm text-muted-foreground italic">Sem descrição detalhada.</p>
           )}
 
-          {/* Comments */}
+          {/* Comentários */}
           <CommentThread
             ticketCode={code}
             comments={comments}
             currentUserId={currentUserId}
           />
 
-          {/* History */}
+          {/* Histórico */}
           {history.length > 0 && <HistoryLog history={history} />}
         </div>
 
-        {/* Sidebar actions */}
+        {/* Ações */}
         <TicketActions
           ticket={ticket}
           users={activeUsers}

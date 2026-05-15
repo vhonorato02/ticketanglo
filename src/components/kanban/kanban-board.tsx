@@ -1,6 +1,6 @@
 'use client';
 
-import { useOptimistic, useTransition } from 'react';
+import { useOptimistic, useTransition, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DndContext,
@@ -12,12 +12,10 @@ import {
   DragOverlay,
   DragStartEvent,
 } from '@dnd-kit/core';
-import { useState } from 'react';
 import { toast } from 'sonner';
 import { KanbanColumn } from './kanban-column';
 import { KanbanCard } from './kanban-card';
 import { updateTicketStatus } from '@/actions/tickets';
-import { STATUS_ORDER } from '@/lib/constants';
 import type { Ticket } from '@/db/schema';
 
 type Status = Ticket['status'];
@@ -40,7 +38,7 @@ const BOARD_STATUSES: Status[] = ['aberto', 'em_andamento', 'aguardando', 'resol
 
 export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [activeTicket, setActiveTicket] = useState<KanbanTicket | null>(null);
 
   const [optimisticTickets, updateOptimistic] = useOptimistic(
@@ -78,6 +76,18 @@ export function KanbanBoard({ initialTickets }: KanbanBoardProps) {
       router.refresh();
     });
   };
+
+  if (initialTickets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <p className="font-medium">Nenhuma demanda no quadro</p>
+        <p className="text-sm mt-1">
+          Pressione <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd> para
+          registrar a primeira.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

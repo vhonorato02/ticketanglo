@@ -21,11 +21,10 @@ import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants';
 
 interface Props {
   tickets: TicketRow[];
-  users: { id: string; displayName: string }[];
 }
 
 function exportCSV(tickets: TicketRow[]) {
-  const headers = ['Código', 'Área', 'Título', 'Subcategoria', 'Prioridade', 'Status', 'Responsável', 'Criado em'];
+  const headers = ['Código', 'Área', 'Título', 'Subcategoria', 'Prioridade', 'Status', 'Autor', 'Criado em'];
   const rows = tickets.map((t) => [
     t.code,
     t.area,
@@ -47,7 +46,7 @@ function exportCSV(tickets: TicketRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export function TicketTable({ tickets, users }: Props) {
+export function TicketTable({ tickets }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -88,7 +87,7 @@ export function TicketTable({ tickets, users }: Props) {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar tickets..."
+            placeholder="Buscar por código ou título..."
             className="pl-8"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
@@ -143,17 +142,26 @@ export function TicketTable({ tickets, users }: Props) {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon" onClick={() => exportCSV(tickets)} title="Exportar CSV">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => exportCSV(tickets)}
+          title="Exportar CSV"
+        >
           <Download />
         </Button>
       </div>
 
-      {/* Table */}
+      {/* Tabela */}
       {tickets.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <SlidersHorizontal className="mx-auto size-8 mb-3 opacity-40" />
           <p className="font-medium">Nenhum ticket encontrado</p>
-          <p className="text-sm mt-1">Tente ajustar os filtros ou registre um novo ticket.</p>
+          <p className="text-sm mt-1">
+            Tente ajustar os filtros ou pressione{' '}
+            <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd> para
+            registrar uma nova demanda.
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden">
@@ -171,20 +179,19 @@ export function TicketTable({ tickets, users }: Props) {
               </thead>
               <tbody>
                 {tickets.map((ticket) => (
-                  <tr key={ticket.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={ticket.id}
+                    className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/tickets/${ticket.code}`)}
+                  >
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/tickets/${ticket.code}`}
-                        className="font-mono text-xs text-primary hover:underline font-medium"
-                      >
+                      <span className="font-mono text-xs text-primary font-medium">
                         {ticket.code}
-                      </Link>
+                      </span>
                     </td>
                     <td className="px-4 py-3 max-w-[260px]">
-                      <Link href={`/tickets/${ticket.code}`} className="hover:underline line-clamp-1">
-                        {ticket.title}
-                      </Link>
-                      <span className="text-xs text-muted-foreground">{ticket.subcategory}</span>
+                      <p className="line-clamp-1 font-medium">{ticket.title}</p>
+                      <p className="text-xs text-muted-foreground">{ticket.subcategory}</p>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <AreaBadge area={ticket.area} />
@@ -207,7 +214,8 @@ export function TicketTable({ tickets, users }: Props) {
       )}
 
       <p className="text-xs text-muted-foreground text-right">
-        {tickets.length} ticket{tickets.length !== 1 ? 's' : ''} encontrado{tickets.length !== 1 ? 's' : ''}
+        {tickets.length} ticket{tickets.length !== 1 ? 's' : ''} encontrado
+        {tickets.length !== 1 ? 's' : ''}
       </p>
     </div>
   );
