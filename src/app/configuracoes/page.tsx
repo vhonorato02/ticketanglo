@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
-  if (!(session?.user as { isAdmin?: boolean })?.isAdmin) redirect('/');
+  if (!session?.user || !(session.user as { isAdmin?: boolean }).isAdmin) redirect('/');
 
   const users = await getUsers();
 
