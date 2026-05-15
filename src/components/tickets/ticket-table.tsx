@@ -1,11 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { useCallback, useState } from 'react';
-import Link from 'next/link';
+import { useCallback, useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, Download, SlidersHorizontal } from 'lucide-react';
+import { Search, Download, Inbox, X, FilterX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PriorityBadge, StatusBadge, AreaBadge } from './ticket-badge';
@@ -52,6 +51,11 @@ export function TicketTable({ tickets }: Props) {
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
 
+  // Sync local state when URL changes externally
+  useEffect(() => {
+    setSearch(searchParams.get('search') ?? '');
+  }, [searchParams]);
+
   const updateParam = useCallback(
     (key: string, value: string) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -61,7 +65,8 @@ export function TicketTable({ tickets }: Props) {
         params.delete(key);
       }
       params.delete('page');
-      router.push(`${pathname}?${params.toString()}`);
+      const qs = params.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     },
     [pathname, router, searchParams],
   );
@@ -75,30 +80,45 @@ export function TicketTable({ tickets }: Props) {
       } else {
         params.delete('search');
       }
-      router.push(`${pathname}?${params.toString()}`);
+      const qs = params.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     },
     [pathname, router, searchParams],
   );
+
+  const activeArea = searchParams.get('area') ?? 'all';
+  const activeStatus = searchParams.get('status') ?? 'all';
+  const activePriority = searchParams.get('priority') ?? 'all';
+  const hasActiveFilters =
+    activeArea !== 'all' || activeStatus !== 'all' || activePriority !== 'all' || !!search;
+
+  const clearFilters = () => router.push(pathname);
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Buscar por código ou título..."
-            className="pl-8"
+            placeholder="Buscar por código, título ou descrição..."
+            className="pl-9 pr-9"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             id="search-input"
           />
+          {search && (
+            <button
+              onClick={() => handleSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+              aria-label="Limpar busca"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
 
-        <Select
-          value={searchParams.get('area') ?? 'all'}
-          onValueChange={(v) => updateParam('area', v)}
-        >
+        <Select value={activeArea} onValueChange={(v) => updateParam('area', v)}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="Área" />
           </SelectTrigger>
@@ -109,10 +129,7 @@ export function TicketTable({ tickets }: Props) {
           </SelectContent>
         </Select>
 
-        <Select
-          value={searchParams.get('status') ?? 'all'}
-          onValueChange={(v) => updateParam('status', v)}
-        >
+        <Select value={activeStatus} onValueChange={(v) => updateParam('status', v)}>
           <SelectTrigger className="w-36">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -126,10 +143,7 @@ export function TicketTable({ tickets }: Props) {
           </SelectContent>
         </Select>
 
-        <Select
-          value={searchParams.get('priority') ?? 'all'}
-          onValueChange={(v) => updateParam('priority', v)}
-        >
+        <Select value={activePriority} onValueChange={(v) => updateParam('priority', v)}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="Prioridade" />
           </SelectTrigger>
@@ -142,46 +156,92 @@ export function TicketTable({ tickets }: Props) {
           </SelectContent>
         </Select>
 
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => exportCSV(tickets)}
-          title="Exportar CSV"
-        >
-          <Download />
-        </Button>
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="text-muted-foreground gap-1.5"
+          >
+            <FilterX className="size-3.5" />
+            Limpar
+          </Button>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
+            {tickets.length} {tickets.length === 1 ? 'demanda' : 'demandas'}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => exportCSV(tickets)}
+            title="Exportar CSV"
+            aria-label="Exportar CSV"
+            disabled={tickets.length === 0}
+          >
+            <Download />
+          </Button>
+        </div>
       </div>
 
       {/* Tabela */}
       {tickets.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <SlidersHorizontal className="mx-auto size-8 mb-3 opacity-40" />
-          <p className="font-medium">Nenhum ticket encontrado</p>
-          <p className="text-sm mt-1">
-            Tente ajustar os filtros ou pressione{' '}
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">N</kbd> para
-            registrar uma nova demanda.
+        <div className="rounded-xl border bg-card py-16 text-center">
+          <div className="size-12 rounded-2xl bg-muted/60 mx-auto flex items-center justify-center mb-4">
+            <Inbox className="size-5 text-muted-foreground" />
+          </div>
+          <p className="font-medium">
+            {hasActiveFilters
+              ? 'Nenhuma demanda encontrada com esses filtros'
+              : 'Nenhuma demanda registrada'}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {hasActiveFilters ? (
+              <>Ajuste os filtros ou{' '}
+                <button onClick={clearFilters} className="text-primary hover:underline">
+                  limpe a busca
+                </button>
+                .
+              </>
+            ) : (
+              <>
+                Pressione <kbd className="kbd mx-0.5">N</kbd> para registrar a primeira.
+              </>
+            )}
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border overflow-hidden">
+        <div className="rounded-xl border bg-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/40">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Código</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Título</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Área</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Prioridade</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Criado em</th>
+                <tr className="border-b bg-muted/40 text-xs">
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                    Código
+                  </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                    Demanda
+                  </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
+                    Área
+                  </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">
+                    Prioridade
+                  </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">
+                    Criada
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {tickets.map((ticket) => (
                   <tr
                     key={ticket.id}
-                    className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className="border-b last:border-0 hover:bg-muted/40 transition-colors cursor-pointer focus-within:bg-muted/40"
                     onClick={() => router.push(`/tickets/${ticket.code}`)}
                   >
                     <td className="px-4 py-3">
@@ -189,9 +249,14 @@ export function TicketTable({ tickets }: Props) {
                         {ticket.code}
                       </span>
                     </td>
-                    <td className="px-4 py-3 max-w-[260px]">
+                    <td className="px-4 py-3 max-w-[280px]">
                       <p className="line-clamp-1 font-medium">{ticket.title}</p>
-                      <p className="text-xs text-muted-foreground">{ticket.subcategory}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {ticket.subcategory}
+                        {ticket.authorName && (
+                          <> · por {ticket.authorName.split(' ')[0]}</>
+                        )}
+                      </p>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <AreaBadge area={ticket.area} />
@@ -203,7 +268,7 @@ export function TicketTable({ tickets }: Props) {
                       <StatusBadge status={ticket.status} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs hidden lg:table-cell whitespace-nowrap">
-                      {format(new Date(ticket.createdAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                      {format(new Date(ticket.createdAt), "dd/MM 'às' HH:mm", { locale: ptBR })}
                     </td>
                   </tr>
                 ))}
@@ -212,11 +277,6 @@ export function TicketTable({ tickets }: Props) {
           </div>
         </div>
       )}
-
-      <p className="text-xs text-muted-foreground text-right">
-        {tickets.length} ticket{tickets.length !== 1 ? 's' : ''} encontrado
-        {tickets.length !== 1 ? 's' : ''}
-      </p>
     </div>
   );
 }

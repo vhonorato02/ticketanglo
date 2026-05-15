@@ -23,21 +23,32 @@ interface KanbanColumnProps {
 }
 
 const columnAccent: Record<Status, string> = {
-  aberto: 'border-t-zinc-400',
-  em_andamento: 'border-t-primary',
-  aguardando: 'border-t-yellow-500',
-  resolvido: 'border-t-green-600',
-  arquivado: 'border-t-zinc-300',
+  aberto: 'before:bg-zinc-400',
+  em_andamento: 'before:bg-primary',
+  aguardando: 'before:bg-amber-500',
+  resolvido: 'before:bg-green-500',
+  arquivado: 'before:bg-zinc-300',
+};
+
+const dotColor: Record<Status, string> = {
+  aberto: 'bg-zinc-400',
+  em_andamento: 'bg-primary',
+  aguardando: 'bg-amber-500',
+  resolvido: 'bg-green-500',
+  arquivado: 'bg-zinc-300',
 };
 
 export function KanbanColumn({ status, tickets }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
-    <div className="flex flex-col w-72 shrink-0">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">{STATUS_LABELS[status]}</h3>
-        <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+    <div className="flex flex-col w-[280px] sm:w-[300px] shrink-0">
+      <div className="flex items-center justify-between mb-2.5 px-1">
+        <div className="flex items-center gap-2">
+          <span className={cn('size-1.5 rounded-full', dotColor[status])} />
+          <h3 className="text-sm font-semibold">{STATUS_LABELS[status]}</h3>
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums bg-muted/60 rounded-full px-2 py-0.5 min-w-[1.5rem] text-center">
           {tickets.length}
         </span>
       </div>
@@ -45,13 +56,14 @@ export function KanbanColumn({ status, tickets }: KanbanColumnProps) {
       <div
         ref={setNodeRef}
         className={cn(
-          'flex flex-col gap-2 rounded-xl border-t-2 border border-border bg-muted/30 p-2 min-h-[120px] transition-colors',
+          'relative flex flex-col gap-2 rounded-xl border bg-muted/30 p-2 min-h-[140px] flex-1 transition-colors',
+          'before:absolute before:top-0 before:left-0 before:right-0 before:h-0.5 before:rounded-t-xl',
           columnAccent[status],
-          isOver && 'bg-muted/60 border-primary/30',
+          isOver && 'bg-primary/5 border-primary/40 ring-2 ring-primary/30 ring-inset',
         )}
       >
         {tickets.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground py-8">
+          <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground/60 py-8 px-3 text-center">
             {isOver ? 'Soltar aqui' : 'Vazio'}
           </div>
         ) : (

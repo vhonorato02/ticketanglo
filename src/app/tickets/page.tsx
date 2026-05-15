@@ -5,6 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Demandas' };
+
 interface PageProps {
   searchParams: Promise<{
     area?: string;
@@ -34,19 +36,23 @@ export default async function TicketsPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Tickets</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Demandas</h1>
+        <p className="text-muted-foreground text-sm mt-1.5">
+          Filtre, busque e gerencie todas as demandas do colégio.
+        </p>
+      </div>
 
       <Suspense
         fallback={
           <div className="space-y-3">
-            <div className="flex gap-2">
-              <Skeleton className="h-9 flex-1" />
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-9 flex-1 min-w-[220px] max-w-md" />
               <Skeleton className="h-9 w-32" />
               <Skeleton className="h-9 w-36" />
+              <Skeleton className="h-9 w-32" />
             </div>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
+            <Skeleton className="h-72 w-full rounded-xl" />
           </div>
         }
       >

@@ -2,6 +2,8 @@
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { FilterX } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -27,17 +29,19 @@ export function KanbanFilters({ users }: Props) {
       } else {
         params.delete(key);
       }
-      router.push(`${pathname}?${params.toString()}`);
+      const qs = params.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     },
     [pathname, router, searchParams],
   );
 
+  const activeArea = searchParams.get('area') ?? 'all';
+  const activeAssignee = searchParams.get('assigneeId') ?? 'all';
+  const hasActive = activeArea !== 'all' || activeAssignee !== 'all';
+
   return (
-    <div className="flex gap-2 flex-wrap">
-      <Select
-        value={searchParams.get('area') ?? 'all'}
-        onValueChange={(v) => update('area', v)}
-      >
+    <div className="flex gap-2 flex-wrap items-center">
+      <Select value={activeArea} onValueChange={(v) => update('area', v)}>
         <SelectTrigger className="w-36 h-8 text-xs">
           <SelectValue placeholder="Área" />
         </SelectTrigger>
@@ -48,15 +52,12 @@ export function KanbanFilters({ users }: Props) {
         </SelectContent>
       </Select>
 
-      <Select
-        value={searchParams.get('assigneeId') ?? 'all'}
-        onValueChange={(v) => update('assigneeId', v)}
-      >
-        <SelectTrigger className="w-40 h-8 text-xs">
+      <Select value={activeAssignee} onValueChange={(v) => update('assigneeId', v)}>
+        <SelectTrigger className="w-44 h-8 text-xs">
           <SelectValue placeholder="Responsável" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Todos</SelectItem>
+          <SelectItem value="all">Todos responsáveis</SelectItem>
           {users.map((u) => (
             <SelectItem key={u.id} value={u.id}>
               {u.displayName}
@@ -64,6 +65,18 @@ export function KanbanFilters({ users }: Props) {
           ))}
         </SelectContent>
       </Select>
+
+      {hasActive && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push(pathname)}
+          className="text-xs text-muted-foreground gap-1.5 h-8"
+        >
+          <FilterX className="size-3.5" />
+          Limpar
+        </Button>
+      )}
     </div>
   );
 }
