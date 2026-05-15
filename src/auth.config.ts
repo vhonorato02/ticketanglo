@@ -27,9 +27,8 @@ export const authConfig: NextAuthConfig = {
     },
     session({ session, token }) {
       session.user.id = token.id as string;
-      (session.user as Record<string, unknown>).username = token.username;
-      (session.user as Record<string, unknown>).isAdmin = token.isAdmin;
       session.user.name = token.displayName as string;
+      Object.assign(session.user, { username: token.username, isAdmin: token.isAdmin });
       return session;
     },
   },
